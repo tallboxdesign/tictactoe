@@ -105,12 +105,54 @@
             margin: 20px 0;
             min-height: 60px;
         }
+        #playerSelector {
+            position: absolute;
+            top: 110px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+            text-align: center;
+            font-size: 16px;
+        }
+        .player-option {
+            display: inline-block;
+            margin: 0 10px;
+            cursor: pointer;
+        }
+        .player-option input {
+            margin-right: 5px;
+        }
+        .confetti-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 90;
+            pointer-events: none;
+        }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
 </head>
 <body>
     <div id="info">5x5 Tic-Tac-Toe (Connect 4) - X: TATI, O: YONI</div>
-    <div id="gameStatus">TATI's turn (X)</div>
+    <div id="gameStatus">Select who starts</div>
     <button id="resetButton" onclick="resetGame()">Reset Game</button>
+    
+    <div id="playerSelector">
+        <div class="player-option">
+            <input type="radio" id="tatiFirst" name="startPlayer" value="X" checked>
+            <label for="tatiFirst">TATI starts (X)</label>
+        </div>
+        <div class="player-option">
+            <input type="radio" id="yoniFirst" name="startPlayer" value="O">
+            <label for="yoniFirst">YONI starts (O)</label>
+        </div>
+        <button class="btn" id="startGameBtn">Start Game</button>
+    </div>
     
     <div id="scoreBoard">
         <div>TATI (X): <span id="scoreX">0</span> points</div>
@@ -130,6 +172,8 @@
         </div>
     </div>
     
+    <div class="confetti-container" id="confettiContainer"></div>
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
         // Game variables
@@ -137,6 +181,7 @@
         let board = [];
         let currentPlayer = 'X';
         let gameOver = false;
+        let gameStarted = false;
         const BOARD_SIZE = 5;
         const CELL_SIZE = 1;
         const WINNING_LENGTH = 4;
@@ -220,8 +265,26 @@
             document.addEventListener('mousedown', onMouseDown);
             document.getElementById('submitAnswer').addEventListener('click', checkMathAnswer);
             document.getElementById('skipQuestion').addEventListener('click', skipMathQuestion);
+            document.getElementById('startGameBtn').addEventListener('click', startGame);
             
             // Update the game status
+            document.getElementById('gameStatus').textContent = "Select who starts";
+        }
+        
+        // Start the game
+        function startGame() {
+            if (gameStarted) return;
+            
+            gameStarted = true;
+            
+            // Set the starting player based on selection
+            const selectedPlayer = document.querySelector('input[name="startPlayer"]:checked').value;
+            currentPlayer = selectedPlayer;
+            
+            // Hide the player selector
+            document.getElementById('playerSelector').style.display = 'none';
+            
+            // Update game status
             updateGameStatus();
         }
 
@@ -265,10 +328,45 @@
             document.getElementById('scoreX').textContent = scoreX;
             document.getElementById('scoreO').textContent = scoreO;
         }
+        
+        // Trigger confetti effect
+        function triggerConfetti(winner) {
+            const colors = winner === 'X' ? ['#ff0000', '#ff3333', '#ff6666'] : ['#0000ff', '#3333ff', '#6666ff'];
+            
+            // First confetti burst - center
+            confetti({
+                particleCount: 150,
+                spread: 100,
+                origin: { y: 0.6 },
+                colors: colors
+            });
+            
+            // Second burst - from left
+            setTimeout(() => {
+                confetti({
+                    particleCount: 80,
+                    angle: 60,
+                    spread: 55,
+                    origin: { x: 0, y: 0.6 },
+                    colors: colors
+                });
+            }, 200);
+            
+            // Third burst - from right
+            setTimeout(() => {
+                confetti({
+                    particleCount: 80,
+                    angle: 120,
+                    spread: 55,
+                    origin: { x: 1, y: 0.6 },
+                    colors: colors
+                });
+            }, 400);
+        }
 
         // Place a mark on the board
         function placeMark(row, col) {
-            if (gameOver || board[row][col] !== null) return;
+            if (!gameStarted || gameOver || board[row][col] !== null) return;
 
             board[row][col] = currentPlayer;
             
@@ -322,9 +420,14 @@
                 const winner = currentPlayer === 'X' ? PLAYER_X : PLAYER_O;
                 document.getElementById('gameStatus').textContent = `${winner} wins!`;
                 
+                // Trigger confetti
+                triggerConfetti(currentPlayer);
+                
                 // Award points
                 if (currentPlayer === 'X') {
+                    // TATI wins - gets 10 points and takes 5 from YONI
                     scoreX += 10;
+                    scoreO = Math.max(0, scoreO - 5); // Ensure score doesn't go below 0
                     updateScoreDisplay();
                     saveGame();
                 } else {
@@ -745,11 +848,14 @@
                 
                 // Reset game state
                 board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
-                currentPlayer = 'X';
+                gameStarted = false;
                 gameOver = false;
                 
+                // Show player selector
+                document.getElementById('playerSelector').style.display = 'block';
+                
                 // Update display
-                document.getElementById('gameStatus').textContent = `${PLAYER_X}'s turn (X)`;
+                document.getElementById('gameStatus').textContent = "Select who starts";
                 
                 // Force render update
                 renderer.render(scene, camera);
@@ -760,7 +866,7 @@
 
         // Handle mouse click
         function onMouseDown(event) {
-            if (gameOver) return;
+            if (!gameStarted || gameOver) return;
             
             const mouse = new THREE.Vector2();
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
