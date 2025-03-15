@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>5x5 Tic-Tac-Toe - YONI vs TATI</title>
+    <!-- PeerJS for WebRTC peer-to-peer connections -->
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -134,10 +136,198 @@
             z-index: 90;
             pointer-events: none;
         }
+        
+        /* Mode selector styles */
+        #modeSelector {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .mode-card {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 10px;
+            width: 300px;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+        
+        .mode-card:hover {
+            transform: scale(1.05);
+        }
+        
+        .mode-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        
+        /* Multiplayer setup styles */
+        #multiplayerSetup {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            flex-direction: column;
+        }
+        
+        .setup-card {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            width: 400px;
+            text-align: center;
+        }
+        
+        .tabs {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            background-color: #ddd;
+            cursor: pointer;
+            border-radius: 5px 5px 0 0;
+            margin: 0 5px;
+        }
+        
+        .tab.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        #gameIdDisplay {
+            font-size: 24px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+        
+        #copyButton {
+            padding: 5px 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        
+        #connectionStatus {
+            position: absolute;
+            top: 10px;
+            left: 20px;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 90;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .status-connecting {
+            background-color: orange;
+        }
+        
+        .status-connected {
+            background-color: green;
+        }
+        
+        .status-disconnected {
+            background-color: red;
+        }
+        
+        #waitingMessage {
+            font-size: 20px;
+            margin: 20px 0;
+            color: #666;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
 </head>
 <body>
+    <!-- Mode Selector Screen -->
+    <div id="modeSelector">
+        <div class="mode-card" id="singlePcMode">
+            <div class="mode-icon">🖥️</div>
+            <h2>Single PC Mode</h2>
+            <p>Play on this computer, taking turns</p>
+        </div>
+        <div class="mode-card" id="multiplayerMode">
+            <div class="mode-icon">🌐</div>
+            <h2>Two PC Mode</h2>
+            <p>Play with someone on another computer</p>
+        </div>
+    </div>
+    
+    <!-- Multiplayer Setup Screen -->
+    <div id="multiplayerSetup">
+        <div class="setup-card">
+            <h2>Two PC Mode Setup</h2>
+            <div class="tabs">
+                <div class="tab active" data-tab="create">Create Game</div>
+                <div class="tab" data-tab="join">Join Game</div>
+            </div>
+            
+            <div class="tab-content active" id="createGame">
+                <p>Create a new game and share the ID with your friend</p>
+                <button class="btn" id="generateGameBtn">Generate Game ID</button>
+                <div id="gameIdDisplay" style="display:none;"></div>
+                <button id="copyButton" style="display:none;">Copy</button>
+                <p>You will play as: <span id="creatorRole">TATI (X)</span></p>
+                <div id="waitingMessage" style="display:none;">Waiting for opponent to join...</div>
+            </div>
+            
+            <div class="tab-content" id="joinGame">
+                <p>Enter the game ID shared by your friend</p>
+                <input type="text" id="gameIdInput" placeholder="Game ID" style="width:100%; padding:10px; margin:10px 0;">
+                <p>You will play as: <span id="joinerRole">YONI (O)</span></p>
+                <button class="btn" id="joinGameBtn">Join Game</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Connection Status -->
+    <div id="connectionStatus">
+        <span class="status-indicator status-disconnected"></span>
+        <span id="statusText">Disconnected</span>
+    </div>
+    
     <div id="info">5x5 Tic-Tac-Toe (Connect 4) - X: TATI, O: YONI</div>
     <div id="gameStatus">Select who starts</div>
     <button id="resetButton" onclick="resetGame()">Reset Game</button>
@@ -182,6 +372,7 @@
         let currentPlayer = 'X';
         let gameOver = false;
         let gameStarted = false;
+        let gameMode = 'singlePc'; // 'singlePc' or 'multiplayer'
         const BOARD_SIZE = 5;
         const CELL_SIZE = 1;
         const WINNING_LENGTH = 4;
@@ -195,10 +386,241 @@
         let scoreX = 0;
         let scoreO = 0;
         
+        // Multiplayer variables
+        let peer;
+        let connection;
+        let isHost = false;
+        let myPlayerSymbol = null;
+        let gameId = '';
+        
         // Math challenge variables
         let currentAnswer = 0;
         let mathDifficulty = 1; // Start with easy questions
         let consecutiveCorrect = 0;
+        
+        // Mode Selection
+        document.getElementById('singlePcMode').addEventListener('click', () => {
+            gameMode = 'singlePc';
+            document.getElementById('modeSelector').style.display = 'none';
+            initGame();
+        });
+        
+        document.getElementById('multiplayerMode').addEventListener('click', () => {
+            gameMode = 'multiplayer';
+            document.getElementById('modeSelector').style.display = 'none';
+            document.getElementById('multiplayerSetup').style.display = 'flex';
+            setupMultiplayerTabs();
+        });
+        
+        // Multiplayer Setup Tabs
+        function setupMultiplayerTabs() {
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    // Remove active class from all tabs and contents
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    
+                    // Add active class to clicked tab
+                    tab.classList.add('active');
+                    
+                    // Show corresponding content
+                    const tabId = tab.getAttribute('data-tab');
+                    if (tabId === 'create') {
+                        document.getElementById('createGame').classList.add('active');
+                    } else if (tabId === 'join') {
+                        document.getElementById('joinGame').classList.add('active');
+                    }
+                });
+            });
+            
+            // Generate Game ID Button
+            document.getElementById('generateGameBtn').addEventListener('click', createMultiplayerGame);
+            
+            // Join Game Button
+            document.getElementById('joinGameBtn').addEventListener('click', joinMultiplayerGame);
+            
+            // Copy Game ID Button
+            document.getElementById('copyButton').addEventListener('click', () => {
+                const gameIdText = document.getElementById('gameIdDisplay').textContent;
+                navigator.clipboard.writeText(gameIdText).then(() => {
+                    alert('Game ID copied to clipboard!');
+                }).catch(err => {
+                    console.error('Could not copy text: ', err);
+                });
+            });
+        }
+        
+        // Create Multiplayer Game
+        function createMultiplayerGame() {
+            isHost = true;
+            myPlayerSymbol = 'X'; // Host is TATI (X)
+            
+            // Generate a random game ID
+            gameId = Math.random().toString(36).substring(2, 10).toUpperCase();
+            
+            // Display the game ID
+            const gameIdDisplay = document.getElementById('gameIdDisplay');
+            gameIdDisplay.textContent = gameId;
+            gameIdDisplay.style.display = 'block';
+            document.getElementById('copyButton').style.display = 'inline-block';
+            document.getElementById('waitingMessage').style.display = 'block';
+            document.getElementById('generateGameBtn').style.display = 'none';
+            
+            // Initialize PeerJS
+            initPeer(gameId);
+        }
+        
+        // Join Multiplayer Game
+        function joinMultiplayerGame() {
+            isHost = false;
+            myPlayerSymbol = 'O'; // Joiner is YONI (O)
+            
+            // Get the game ID from input
+            gameId = document.getElementById('gameIdInput').value.trim();
+            
+            if (!gameId) {
+                alert('Please enter a valid Game ID');
+                return;
+            }
+            
+            // Initialize PeerJS and connect to host
+            initPeer();
+            connectToPeer(gameId);
+        }
+        
+        // Initialize PeerJS
+        function initPeer(id = null) {
+            updateConnectionStatus('connecting', 'Initializing connection...');
+            
+            // Create a new Peer with a random ID if not specified
+            peer = new Peer(id);
+            
+            peer.on('open', (id) => {
+                console.log('My peer ID is: ' + id);
+                updateConnectionStatus('connecting', isHost ? 'Waiting for opponent...' : 'Connecting to game...');
+                
+                if (isHost) {
+                    // Wait for incoming connection
+                    peer.on('connection', (conn) => {
+                        connection = conn;
+                        setupConnectionHandlers();
+                    });
+                }
+            });
+            
+            peer.on('error', (err) => {
+                console.error('PeerJS error:', err);
+                updateConnectionStatus('disconnected', 'Connection error: ' + err.type);
+                alert('Connection error: ' + err.message);
+            });
+        }
+        
+        // Connect to peer
+        function connectToPeer(peerId) {
+            connection = peer.connect(peerId);
+            setupConnectionHandlers();
+        }
+        
+        // Setup connection event handlers
+        function setupConnectionHandlers() {
+            connection.on('open', () => {
+                console.log('Connected to peer!');
+                updateConnectionStatus('connected', 'Connected to opponent');
+                
+                // Close setup screen and start game
+                document.getElementById('multiplayerSetup').style.display = 'none';
+                
+                // Send initial message
+                sendGameMessage({
+                    type: 'hello',
+                    player: myPlayerSymbol
+                });
+                
+                // Initialize the game
+                initGame();
+                
+                if (isHost) {
+                    // Host starts the game automatically
+                    gameStarted = true;
+                    currentPlayer = 'X';
+                    updateGameStatus();
+                    document.getElementById('playerSelector').style.display = 'none';
+                }
+            });
+            
+            connection.on('data', (data) => {
+                handleGameMessage(data);
+            });
+            
+            connection.on('close', () => {
+                console.log('Connection closed');
+                updateConnectionStatus('disconnected', 'Connection closed');
+                alert('Connection to opponent lost.');
+            });
+            
+            connection.on('error', (err) => {
+                console.error('Connection error:', err);
+                updateConnectionStatus('disconnected', 'Connection error');
+            });
+        }
+        
+        // Send game message to peer
+        function sendGameMessage(message) {
+            if (connection && connection.open) {
+                connection.send(message);
+            }
+        }
+        
+        // Handle incoming game message
+        function handleGameMessage(message) {
+            console.log('Received message:', message);
+            
+            switch (message.type) {
+                case 'hello':
+                    console.log('Opponent is player:', message.player);
+                    break;
+                    
+                case 'move':
+                    if (gameMode === 'multiplayer' && message.player !== myPlayerSymbol) {
+                        // Process opponent's move
+                        placeMark(message.row, message.col, true);
+                    }
+                    break;
+                    
+                case 'reset':
+                    // Handle game reset
+                    if (gameMode === 'multiplayer' && !isHost) {
+                        resetGameFromMessage();
+                    }
+                    break;
+                    
+                case 'score_update':
+                    // Update scores
+                    scoreX = message.scoreX;
+                    scoreO = message.scoreO;
+                    updateScoreDisplay();
+                    break;
+            }
+        }
+        
+        // Update connection status display
+        function updateConnectionStatus(status, message) {
+            const statusElem = document.getElementById('connectionStatus');
+            const indicator = statusElem.querySelector('.status-indicator');
+            const text = document.getElementById('statusText');
+            
+            statusElem.style.display = 'block';
+            
+            // Remove all status classes
+            indicator.classList.remove('status-connecting', 'status-connected', 'status-disconnected');
+            
+            // Add appropriate class
+            indicator.classList.add('status-' + status);
+            
+            // Update text
+            text.textContent = message;
+        }
         
         // Load saved scores from local storage
         function loadSavedGame() {
@@ -221,12 +643,26 @@
                 consecutiveCorrect: consecutiveCorrect
             };
             localStorage.setItem('tictactoeScores', JSON.stringify(gameData));
+            
+            // In multiplayer mode, send score update to peer
+            if (gameMode === 'multiplayer' && connection && connection.open) {
+                sendGameMessage({
+                    type: 'score_update',
+                    scoreX: scoreX,
+                    scoreO: scoreO
+                });
+            }
         }
 
         // Initialize the scene
-        function init() {
+        function initGame() {
             // Load saved game
-            loadSavedGame();
+            if (gameMode === 'singlePc') {
+                loadSavedGame();
+            } else {
+                // In multiplayer mode, show connection status
+                document.getElementById('connectionStatus').style.display = 'block';
+            }
             
             // Create the scene
             scene = new THREE.Scene();
@@ -265,10 +701,24 @@
             document.addEventListener('mousedown', onMouseDown);
             document.getElementById('submitAnswer').addEventListener('click', checkMathAnswer);
             document.getElementById('skipQuestion').addEventListener('click', skipMathQuestion);
-            document.getElementById('startGameBtn').addEventListener('click', startGame);
             
-            // Update the game status
-            document.getElementById('gameStatus').textContent = "Select who starts";
+            if (gameMode === 'singlePc') {
+                document.getElementById('startGameBtn').addEventListener('click', startGame);
+                // Show the player selector in single PC mode
+                document.getElementById('playerSelector').style.display = 'block';
+            } else {
+                // In multiplayer mode, the host always controls the game start
+                if (isHost) {
+                    document.getElementById('gameStatus').textContent = "You start as TATI (X)";
+                } else {
+                    document.getElementById('gameStatus').textContent = "Waiting for TATI to start";
+                }
+                // Hide the player selector in multiplayer mode
+                document.getElementById('playerSelector').style.display = 'none';
+            }
+            
+            // Start animation loop
+            animate();
         }
         
         // Start the game
@@ -320,7 +770,16 @@
         // Update game status display
         function updateGameStatus() {
             const playerName = currentPlayer === 'X' ? PLAYER_X : PLAYER_O;
-            document.getElementById('gameStatus').textContent = `${playerName}'s turn (${currentPlayer})`;
+            
+            if (gameMode === 'multiplayer') {
+                if (currentPlayer === myPlayerSymbol) {
+                    document.getElementById('gameStatus').textContent = `Your turn (${currentPlayer})`;
+                } else {
+                    document.getElementById('gameStatus').textContent = `Opponent's turn (${currentPlayer})`;
+                }
+            } else {
+                document.getElementById('gameStatus').textContent = `${playerName}'s turn (${currentPlayer})`;
+            }
         }
         
         // Update score display
@@ -365,10 +824,27 @@
         }
 
         // Place a mark on the board
-        function placeMark(row, col) {
+        function placeMark(row, col, fromOpponent = false) {
+            // In multiplayer mode, only process moves from your turn or from opponent
+            if (gameMode === 'multiplayer') {
+                if (!fromOpponent && currentPlayer !== myPlayerSymbol) {
+                    return; // Not your turn
+                }
+            }
+            
             if (!gameStarted || gameOver || board[row][col] !== null) return;
 
             board[row][col] = currentPlayer;
+            
+            // Send move to peer in multiplayer mode
+            if (gameMode === 'multiplayer' && !fromOpponent) {
+                sendGameMessage({
+                    type: 'move',
+                    player: myPlayerSymbol,
+                    row: row,
+                    col: col
+                });
+            }
             
             // Create X or O geometry
             let markGeometry, markMaterial;
@@ -418,7 +894,17 @@
             if (checkWinner(row, col)) {
                 gameOver = true;
                 const winner = currentPlayer === 'X' ? PLAYER_X : PLAYER_O;
-                document.getElementById('gameStatus').textContent = `${winner} wins!`;
+                
+                if (gameMode === 'multiplayer') {
+                    // In multiplayer, show different messages based on who won
+                    if (currentPlayer === myPlayerSymbol) {
+                        document.getElementById('gameStatus').textContent = `You win!`;
+                    } else {
+                        document.getElementById('gameStatus').textContent = `Opponent wins!`;
+                    }
+                } else {
+                    document.getElementById('gameStatus').textContent = `${winner} wins!`;
+                }
                 
                 // Trigger confetti
                 triggerConfetti(currentPlayer);
@@ -431,11 +917,15 @@
                     updateScoreDisplay();
                     saveGame();
                 } else {
-                    // YONI wins, show math question
+                    // YONI wins
                     scoreO += 10;
                     updateScoreDisplay();
                     saveGame();
-                    setTimeout(showMathQuestion, 1500);
+                    
+                    // In single-player mode, show math question
+                    if (gameMode === 'singlePc') {
+                        setTimeout(showMathQuestion, 1500);
+                    }
                 }
                 
                 highlightWinningCells();
@@ -848,14 +1338,31 @@
                 
                 // Reset game state
                 board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
-                gameStarted = false;
                 gameOver = false;
                 
-                // Show player selector
-                document.getElementById('playerSelector').style.display = 'block';
-                
-                // Update display
-                document.getElementById('gameStatus').textContent = "Select who starts";
+                if (gameMode === 'multiplayer') {
+                    // In multiplayer, only the host can fully reset the game
+                    if (isHost) {
+                        gameStarted = true;
+                        currentPlayer = 'X';
+                        
+                        // Send reset message to peer
+                        sendGameMessage({
+                            type: 'reset'
+                        });
+                        
+                        // Update game status
+                        updateGameStatus();
+                    } else {
+                        // Non-host players should wait for reset message
+                        document.getElementById('gameStatus').textContent = "Waiting for host to reset...";
+                    }
+                } else {
+                    // In single PC mode, show the player selector
+                    gameStarted = false;
+                    document.getElementById('playerSelector').style.display = 'block';
+                    document.getElementById('gameStatus').textContent = "Select who starts";
+                }
                 
                 // Force render update
                 renderer.render(scene, camera);
@@ -863,10 +1370,25 @@
                 console.error("Error resetting game:", error);
             }
         }
+        
+        // Reset game from message (for non-host player)
+        function resetGameFromMessage() {
+            gameStarted = true;
+            currentPlayer = 'X';
+            gameOver = false;
+            
+            // Update game status
+            updateGameStatus();
+        }
 
         // Handle mouse click
         function onMouseDown(event) {
             if (!gameStarted || gameOver) return;
+            
+            // In multiplayer mode, only process clicks during your turn
+            if (gameMode === 'multiplayer' && currentPlayer !== myPlayerSymbol) {
+                return;
+            }
             
             const mouse = new THREE.Vector2();
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -907,10 +1429,6 @@
             
             renderer.render(scene, camera);
         }
-
-        // Initialize and start the game
-        init();
-        animate();
     </script>
 </body>
 </html>
