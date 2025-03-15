@@ -484,74 +484,59 @@
         
         // Create Multiplayer Game
         function createMultiplayerGame() {
-    isHost = true;
-    myPlayerSymbol = 'X'; // Host is TATI (X)
-    
-    // Generate a random game ID
-    gameId = Math.random().toString(36).substring(2, 10).toUpperCase();
-    
-    // Display the game ID
-    const gameIdDisplay = document.getElementById('gameIdDisplay');
-    gameIdDisplay.textContent = gameId;
-    gameIdDisplay.style.display = 'block';
-    document.getElementById('copyButton').style.display = 'inline-block';
-    document.getElementById('waitingMessage').style.display = 'block';
-    document.getElementById('generateGameBtn').style.display = 'none';
-    
-    // Initialize PeerJS
-    initPeer(gameId);
-    
-    // Start the game immediately for the host
-    document.getElementById('multiplayerSetup').style.display = 'none';
-    document.getElementById('gameBoard').style.display = 'block';
-    document.getElementById('connectionStatus').style.display = 'block';
-    
-    // Initialize the game
-    initGame();
-    
-    // Host starts the game automatically
-    gameStarted = true;
-    currentPlayer = 'X';
-    updateGameStatus();
-    document.getElementById('playerSelector').style.display = 'none';
-    document.getElementById('gameStatus').textContent = "Waiting for opponent to join with ID: " + gameId;
-}
+            isHost = true;
+            myPlayerSymbol = 'X'; // Host is TATI (X)
+            
+            // Generate a random game ID
+            gameId = Math.random().toString(36).substring(2, 10).toUpperCase();
+            
+            // Display the game ID
+            const gameIdDisplay = document.getElementById('gameIdDisplay');
+            gameIdDisplay.textContent = gameId;
+            gameIdDisplay.style.display = 'block';
+            document.getElementById('copyButton').style.display = 'inline-block';
+            document.getElementById('waitingMessage').style.display = 'block';
+            document.getElementById('generateGameBtn').style.display = 'none';
+            
+            // Initialize PeerJS
+            initPeer(gameId);
+            
+            // Initialize the game
+            initGame();
+            
+            // Host starts the game automatically
+            gameStarted = true;
+            currentPlayer = 'X';
+            updateGameStatus();
+            document.getElementById('playerSelector').style.display = 'none';
+            document.getElementById('gameStatus').textContent = "Waiting for opponent to join with ID: " + gameId;
+        }
 
-function joinMultiplayerGame() {
-    isHost = false;
-    myPlayerSymbol = 'O'; // Joiner is YONI (O)
-    
-    // Get the game ID from input
-    gameId = document.getElementById('gameIdInput').value.trim();
-    
-    if (!gameId) {
-        alert('Please enter a valid Game ID');
-        return;
-    }
-    
-    // Initialize PeerJS and connect to host
-    initPeer();
-    connectToPeer(gameId);
-    
-    // Start the game immediately for the joiner
-    document.getElementById('multiplayerSetup').style.display = 'none';
-    document.getElementById('gameBoard').style.display = 'block';
-    document.getElementById('connectionStatus').style.display = 'block';
-    
-    // Initialize the game
-    initGame();
-    
-    // Set up the game for the joiner
-    gameStarted = true;
-    currentPlayer = 'X'; // Game always starts with X (host)
-    updateGameStatus();
-    document.getElementById('playerSelector').style.display = 'none';
-    document.getElementById('gameStatus').textContent = "Connecting to game...";
-}
+        function joinMultiplayerGame() {
+            isHost = false;
+            myPlayerSymbol = 'O'; // Joiner is YONI (O)
+            
+            // Get the game ID from input
+            gameId = document.getElementById('gameIdInput').value.trim();
+            
+            if (!gameId) {
+                alert('Please enter a valid Game ID');
+                return;
+            }
             
             // Initialize PeerJS and connect to host
             initPeer();
             connectToPeer(gameId);
+            
+            // Initialize the game
+            initGame();
+            
+            // Set up the game for the joiner
+            gameStarted = true;
+            currentPlayer = 'X'; // Game always starts with X (host)
+            updateGameStatus();
+            document.getElementById('playerSelector').style.display = 'none';
+            document.getElementById('gameStatus').textContent = "Connecting to game...";
         }
         
         // Initialize PeerJS
@@ -593,17 +578,11 @@ function joinMultiplayerGame() {
                 console.log('Connected to peer!');
                 updateConnectionStatus('connected', 'Connected to opponent');
                 
-                // Close setup screen and start game
-                document.getElementById('multiplayerSetup').style.display = 'none';
-                
                 // Send initial message
                 sendGameMessage({
                     type: 'hello',
                     player: myPlayerSymbol
                 });
-                
-                // Initialize the game
-                initGame();
                 
                 if (isHost) {
                     // Host starts the game automatically
