@@ -976,6 +976,15 @@
       }, 400);
     }
     
+    // Make losing pieces fall animation
+    function makeLosingPiecesFall(loser) {
+      scene.traverse((object) => {
+        if (object.userData && object.userData.type === 'mark' && object.userData.player === loser) {
+          object.userData.falling = true;
+        }
+      });
+    }
+    
     // Place a mark on the board
     function placeMark(row, col, fromOpponent = false) {
       if (gameMode === 'multiplayer') {
@@ -1034,6 +1043,9 @@
       if (checkWinner(row, col)) {
         gameOver = true;
         const winner = currentPlayer === 'X' ? PLAYER_X : PLAYER_O;
+        // Determine the loser (the opposite symbol)
+        const loser = currentPlayer === 'X' ? 'O' : 'X';
+        
         if (gameMode === 'multiplayer') {
           if (currentPlayer === myPlayerSymbol) {
             document.getElementById('gameStatus').textContent = `You win!`;
@@ -1044,6 +1056,10 @@
           document.getElementById('gameStatus').textContent = `${winner} wins!`;
         }
         triggerConfetti(currentPlayer);
+        
+        // Make the losing pieces fall
+        makeLosingPiecesFall(loser);
+        
         if (currentPlayer === 'X') {
           scoreX += 10;
           scoreO = Math.max(0, scoreO - 5);
@@ -1505,6 +1521,17 @@
       
       // Always look at the center
       camera.lookAt(0, 0, 0);
+      
+      // Animate falling marks (loser's pieces)
+      scene.traverse((object) => {
+        if (object.userData && object.userData.falling) {
+          // Lower the piece gradually
+          object.position.y -= 0.05; // adjust speed as needed
+          // Add spinning effect
+          object.rotation.x += 0.05;
+          object.rotation.y += 0.05;
+        }
+      });
       
       renderer.render(scene, camera);
     }
