@@ -510,6 +510,9 @@
             updateGameStatus();
             document.getElementById('playerSelector').style.display = 'none';
             document.getElementById('gameStatus').textContent = "Waiting for opponent to join with ID: " + gameId;
+            
+            // Add debugging information
+            console.log("Create multiplayer game initiated with ID:", gameId);
         }
 
         function joinMultiplayerGame() {
@@ -537,43 +540,65 @@
             updateGameStatus();
             document.getElementById('playerSelector').style.display = 'none';
             document.getElementById('gameStatus').textContent = "Connecting to game...";
+            
+            // Hide multiplayer setup
+            document.getElementById('multiplayerSetup').style.display = 'none';
+            
+            // Add debugging information
+            console.log("Join multiplayer game initiated with ID:", gameId);
         }
         
         // Initialize PeerJS
         function initPeer(id = null) {
-            updateConnectionStatus('connecting', 'Initializing connection...');
-            
-            // Create a new Peer with a random ID if not specified
-            peer = new Peer(id);
-            
-            peer.on('open', (id) => {
-                console.log('My peer ID is: ' + id);
-                updateConnectionStatus('connecting', isHost ? 'Waiting for opponent...' : 'Connecting to game...');
+            try {
+                updateConnectionStatus('connecting', 'Initializing connection...');
                 
-                if (isHost) {
-                    // Wait for incoming connection
-                    peer.on('connection', (conn) => {
-                        connection = conn;
-                        setupConnectionHandlers();
-                    });
-                }
-            });
-            
-            peer.on('error', (err) => {
-                console.error('PeerJS error:', err);
-                updateConnectionStatus('disconnected', 'Connection error: ' + err.type);
-                alert('Connection error: ' + err.message);
-            });
+                // Create a new Peer with a random ID if not specified
+                peer = new Peer(id);
+                
+                peer.on('open', (id) => {
+                    console.log('My peer ID is: ' + id);
+                    updateConnectionStatus('connecting', isHost ? 'Waiting for opponent...' : 'Connecting to game...');
+                    
+                    if (isHost) {
+                        // Wait for incoming connection
+                        peer.on('connection', (conn) => {
+                            connection = conn;
+                            setupConnectionHandlers();
+                        });
+                    }
+                });
+                
+                peer.on('error', (err) => {
+                    console.error('PeerJS error:', err);
+                    updateConnectionStatus('disconnected', 'Connection error: ' + err.type);
+                    alert('Connection error: ' + err.message);
+                });
+            } catch (error) {
+                console.error("Error initializing PeerJS:", error);
+                alert("Error setting up multiplayer: " + error.message);
+            }
         }
         
         // Connect to peer
         function connectToPeer(peerId) {
-            connection = peer.connect(peerId);
-            setupConnectionHandlers();
+            try {
+                console.log("Connecting to peer:", peerId);
+                connection = peer.connect(peerId);
+                setupConnectionHandlers();
+            } catch (error) {
+                console.error("Error connecting to peer:", error);
+                alert("Error connecting to game: " + error.message);
+            }
         }
         
         // Setup connection event handlers
         function setupConnectionHandlers() {
+            if (!connection) {
+                console.error("No connection object available");
+                return;
+            }
+            
             connection.on('open', () => {
                 console.log('Connected to peer!');
                 updateConnectionStatus('connected', 'Connected to opponent');
@@ -583,6 +608,10 @@
                     type: 'hello',
                     player: myPlayerSymbol
                 });
+                
+                // Hide multiplayer setup if still visible
+                document.getElementById('multiplayerSetup').style.display = 'none';
+                document.getElementById('connectionStatus').style.display = 'block';
                 
                 if (isHost) {
                     // Host starts the game automatically
@@ -594,6 +623,7 @@
             });
             
             connection.on('data', (data) => {
+                console.log('Received data:', data);
                 handleGameMessage(data);
             });
             
@@ -612,13 +642,16 @@
         // Send game message to peer
         function sendGameMessage(message) {
             if (connection && connection.open) {
+                console.log('Sending message:', message);
                 connection.send(message);
+            } else {
+                console.warn("Cannot send message - connection not open", message);
             }
         }
         
         // Handle incoming game message
         function handleGameMessage(message) {
-            console.log('Received message:', message);
+            console.log('Processing message:', message);
             
             switch (message.type) {
                 case 'hello':
@@ -628,6 +661,7 @@
                 case 'move':
                     if (gameMode === 'multiplayer' && message.player !== myPlayerSymbol) {
                         // Process opponent's move
+                        console.log('Processing opponent move:', message.row, message.col);
                         placeMark(message.row, message.col, true);
                     }
                     break;
@@ -635,15 +669,21 @@
                 case 'reset':
                     // Handle game reset
                     if (gameMode === 'multiplayer' && !isHost) {
+                        console.log('Resetting game from peer message');
                         resetGameFromMessage();
                     }
                     break;
                     
                 case 'score_update':
                     // Update scores
+                    console.log('Updating scores from peer message');
                     scoreX = message.scoreX;
                     scoreO = message.scoreO;
                     updateScoreDisplay();
+                    break;
+                    
+                default:
+                    console.warn('Unknown message type:', message.type);
                     break;
             }
         }
@@ -664,6 +704,8 @@
             
             // Update text
             text.textContent = message;
+            
+            console.log('Connection status:', status, message);
         }
         
         // Load saved scores from local storage
@@ -700,6 +742,8 @@
 
         // Initialize the scene
         function initGame() {
+            console.log("Initializing game in mode:", gameMode);
+            
             // Load saved game
             if (gameMode === 'singlePc') {
                 loadSavedGame();
@@ -1473,6 +1517,11 @@
             
             renderer.render(scene, camera);
         }
+        
+        // Add debug logging at window load
+        window.addEventListener('load', () => {
+            console.log("Window loaded - game initialization complete");
+        });
     </script>
 </body>
 </html>
