@@ -416,6 +416,7 @@
     let isHost = false;
     let myPlayerSymbol = null;
     let gameId = '';
+    let peerConnected = false;
     
     // Math challenge variables
     let currentAnswer = 0;
@@ -493,6 +494,7 @@
       gameIdDisplay.style.display = 'block';
       document.getElementById('copyButton').style.display = 'inline-block';
       document.getElementById('waitingMessage').style.display = 'block';
+      document.getElementById('generateGameBtn').style.display = 'none';
       
       // Show lobby UI with game ID info
       document.getElementById('lobby').style.display = 'block';
@@ -525,7 +527,7 @@
       }
       // Initialize PeerJS and connect to host
       initPeer();
-      connectToPeer(gameId);
+      
       // Initialize game scene (do not start until host clicks Start)
       initGame();
       gameStarted = false;
@@ -533,9 +535,10 @@
       updateGameStatus();
       document.getElementById('playerSelector').style.display = 'none';
       document.getElementById('gameStatus').textContent = "Waiting for host to start game...";
+      
       // Show lobby UI for joiner
       document.getElementById('lobby').style.display = 'block';
-      document.getElementById('lobbyMessage').textContent = "Waiting for host to start game...";
+      document.getElementById('lobbyMessage').textContent = "Connecting to host...";
       document.getElementById('lobbyStartBtn').style.display = 'none';
       
       console.log("Join multiplayer game with ID:", gameId);
@@ -546,16 +549,25 @@
       try {
         updateConnectionStatus('connecting', 'Initializing connection...');
         peer = new Peer(id);
+        
+        peer.on('open', (id) => {
+          console.log('My peer ID is: ' + id);
+          updateConnectionStatus('connecting', isHost ? 'Waiting for opponent...' : 'Connecting to game...');
+          
+          // If joiner, connect to host after peer is open
+          if (!isHost) {
+            connectToPeer(gameId);
+          }
+        });
+        
         if (isHost) {
           peer.on('connection', (conn) => {
+            console.log("Received connection from peer");
             connection = conn;
             setupConnectionHandlers();
           });
         }
-        peer.on('open', (id) => {
-          console.log('My peer ID is: ' + id);
-          updateConnectionStatus('connecting', isHost ? 'Waiting for opponent...' : 'Connecting to game...');
-        });
+        
         peer.on('error', (err) => {
           console.error('PeerJS error:', err);
           updateConnectionStatus('disconnected', 'Connection error: ' + err.type);
@@ -585,31 +597,47 @@
         console.error("No connection object available");
         return;
       }
+      
       connection.on('open', () => {
         console.log('Connected to peer!');
+        peerConnected = true;
         updateConnectionStatus('connected', 'Connected to opponent');
+        
         // Send initial hello message
         sendGameMessage({
           type: 'hello',
           player: myPlayerSymbol
         });
-        // For host, once connection is open, update lobby UI to allow game start.
+        
+        // For host, update lobby UI to allow game start
         if (isHost) {
-          document.getElementById('lobbyMessage').textContent = "Opponent joined. Click Start to begin.";
+          document.getElementById('lobbyMessage').textContent = "Opponent joined! Click Start to begin.";
           document.getElementById('lobbyStartBtn').style.display = 'inline-block';
+          
+          // Ensure the Start button has an event listener
+          document.getElementById('lobbyStartBtn').onclick = function() {
+            startMultiplayerGame();
+          };
+        } else {
+          document.getElementById('lobbyMessage').textContent = "Connected to host. Waiting for game to start...";
         }
       });
+      
       connection.on('data', (data) => {
         console.log('Received data:', data);
         handleGameMessage(data);
       });
+      
       connection.on('close', () => {
         console.log('Connection closed');
+        peerConnected = false;
         updateConnectionStatus('disconnected', 'Connection closed');
         alert('Connection to opponent lost.');
       });
+      
       connection.on('error', (err) => {
         console.error('Connection error:', err);
+        peerConnected = false;
         updateConnectionStatus('disconnected', 'Connection error');
       });
     }
@@ -630,6 +658,11 @@
       switch (message.type) {
         case 'hello':
           console.log('Opponent is player:', message.player);
+          // For host, make sure to update lobby UI when hello is received
+          if (isHost) {
+            document.getElementById('lobbyMessage').textContent = "Opponent joined! Click Start to begin.";
+            document.getElementById('lobbyStartBtn').style.display = 'inline-block';
+          }
           break;
         case 'move':
           if (gameMode === 'multiplayer' && message.player !== myPlayerSymbol) {
@@ -765,6 +798,7 @@
     
     // Start Multiplayer Game (Host clicking Start in lobby)
     function startMultiplayerGame() {
+      console.log("Starting multiplayer game (host)");
       // Host triggers game start only after opponent has joined
       gameStarted = true;
       currentPlayer = 'X'; // Host (TATI) always starts as X
@@ -774,9 +808,6 @@
       // Send start signal to joiner
       sendGameMessage({ type: 'start' });
     }
-    
-    // Add event listener for lobby Start button (only for host)
-    document.getElementById('lobbyStartBtn').addEventListener('click', startMultiplayerGame);
     
     // Create the grid (with improved clickable area for single PC)
     function createGrid() {
