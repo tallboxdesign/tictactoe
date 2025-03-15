@@ -608,6 +608,7 @@
     let currentAnswer = 0;
     let mathDifficulty = 1; // Start with easy questions
     let consecutiveCorrect = 0;
+    let currentMathProblem = null; // Store the current math problem for multiplayer sharing
     
     // Camera settings for stable rendering
     let cameraAngle = 0;
@@ -1005,6 +1006,39 @@
         case 'start_camera':
           console.log('Starting camera rotation');
           isCameraAutoRotating = true;
+          break;
+        case 'math_challenge':
+          console.log('Received math challenge:', message);
+          if (myPlayerSymbol === 'O') {
+            // Only show math challenge to YONI player (O)
+            currentMathProblem = {
+              question: message.question,
+              answer: message.answer
+            };
+            currentAnswer = message.answer;
+            document.getElementById('mathQuestion').textContent = message.question;
+            document.getElementById('answerInput').value = '';
+            document.getElementById('mathModal').style.display = 'flex';
+          }
+          break;
+        case 'math_result':
+          console.log('Received math result:', message);
+          if (myPlayerSymbol === 'X') {
+            // Host (X) receives the result of the math challenge
+            scoreX = message.scoreX;
+            scoreO = message.scoreO;
+            updateScoreDisplay();
+            saveGame();
+            
+            // Display message about the result
+            if (message.success) {
+              displayChatMessage("System", "YONI solved the math problem correctly and doubled points!", "system");
+            } else if (message.skipped) {
+              displayChatMessage("System", "YONI skipped the math challenge.", "system");
+            } else {
+              displayChatMessage("System", `YONI got the math problem wrong. The correct answer was ${message.correctAnswer}.`, "system");
+            }
+          }
           break;
         default:
           console.warn('Unknown message type:', message.type);
@@ -1451,8 +1485,28 @@
           scoreO += 10;
           updateScoreDisplay();
           saveGame();
+          
+          // Show math question for YONI (O) 
+          // In single PC mode, show it directly
           if (gameMode === 'singlePc') {
             setTimeout(showMathQuestion, 1500);
+          } 
+          // In multiplayer mode, host (X) generates and sends the question to YONI (O)
+          else if (gameMode === 'multiplayer') {
+            if (isHost) {
+              setTimeout(() => {
+                const mathProblem = generateMathQuestion();
+                currentMathProblem = mathProblem;
+                // Send math challenge to the opponent
+                sendGameMessage({
+                  type: 'math_challenge',
+                  question: mathProblem.question,
+                  answer: mathProblem.answer
+                });
+                // Add chat message
+                displayChatMessage("System", "Sent a math challenge to YONI (O)", "system");
+              }, 1500);
+            }
           }
         }
         highlightWinningCells();
@@ -1682,6 +1736,8 @@
     // Check math answer
     function checkMathAnswer() {
       const userAnswer = parseInt(document.getElementById('answerInput').value);
+      let success = false;
+      
       if (userAnswer === currentAnswer) {
         scoreO += 10;
         updateScoreDisplay();
@@ -1695,23 +1751,49 @@
           alert("Correct! Your points have been doubled!");
           displayChatMessage("System", "YONI solved the math problem correctly and doubled points!", "system");
         }
-        saveGame();
+        success = true;
       } else {
         consecutiveCorrect = 0;
         alert("Sorry, that's incorrect. The correct answer is " + currentAnswer);
         displayChatMessage("System", `YONI got the math problem wrong. The correct answer was ${currentAnswer}.`, "system");
         if (mathDifficulty > 1 && Math.random() < 0.3) {
           mathDifficulty--;
-          saveGame();
         }
       }
+      
       document.getElementById('mathModal').style.display = 'none';
+      
+      // In multiplayer mode, send result back to host
+      if (gameMode === 'multiplayer' && !isHost) {
+        sendGameMessage({
+          type: 'math_result',
+          success: success,
+          skipped: false,
+          scoreO: scoreO,
+          scoreX: scoreX,
+          correctAnswer: currentAnswer
+        });
+      } else {
+        saveGame();
+      }
     }
     
     // Skip math question
     function skipMathQuestion() {
       document.getElementById('mathModal').style.display = 'none';
       displayChatMessage("System", "YONI skipped the math challenge.", "system");
+      
+      // In multiplayer mode, send result back to host
+      if (gameMode === 'multiplayer' && !isHost) {
+        sendGameMessage({
+          type: 'math_result',
+          success: false,
+          skipped: true,
+          scoreO: scoreO,
+          scoreX: scoreX,
+          correctAnswer: currentAnswer
+        });
+      }
     }
     
     // Check if there's a winner
