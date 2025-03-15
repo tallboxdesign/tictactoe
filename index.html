@@ -293,6 +293,113 @@
       text-align: center;
     }
     
+    /* Chat container styles */
+    #chatContainer {
+      position: absolute;
+      bottom: 80px;
+      right: 20px;
+      width: 300px;
+      background-color: rgba(255, 255, 255, 0.9);
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      z-index: 150;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+    
+    #chatHeader {
+      background-color: #4CAF50;
+      color: white;
+      padding: 8px 12px;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    #chatMessages {
+      height: 200px;
+      overflow-y: auto;
+      padding: 10px;
+      background-color: #f9f9f9;
+    }
+    
+    .message {
+      margin-bottom: 8px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      max-width: 85%;
+      word-wrap: break-word;
+    }
+    
+    .message-tati {
+      background-color: #ffdddd;
+      align-self: flex-start;
+      margin-right: auto;
+    }
+    
+    .message-yoni {
+      background-color: #ddeeff;
+      align-self: flex-end;
+      margin-left: auto;
+    }
+    
+    .message-player {
+      font-weight: bold;
+      font-size: 12px;
+      margin-bottom: 2px;
+    }
+    
+    .message-tati .message-player {
+      color: #cc0000;
+    }
+    
+    .message-yoni .message-player {
+      color: #0066cc;
+    }
+    
+    .message-content {
+      font-size: 14px;
+    }
+    
+    #chatInput {
+      display: flex;
+      border-top: 1px solid #ddd;
+    }
+    
+    #messageInput {
+      flex-grow: 1;
+      padding: 8px 12px;
+      border: none;
+      outline: none;
+      font-size: 14px;
+    }
+    
+    #sendButton {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 8px 15px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    
+    #sendButton:hover {
+      background-color: #45a049;
+    }
+    
+    #chatToggle {
+      margin-right: 5px;
+    }
+    
+    .collapsed #chatMessages,
+    .collapsed #chatInput {
+      display: none;
+    }
+    
     /* Responsive styles */
     @media screen and (max-width: 768px) {
       .mode-card {
@@ -321,6 +428,15 @@
         padding: 8px 16px;
         font-size: 14px;
       }
+      
+      #chatContainer {
+        width: 250px;
+        bottom: 70px;
+      }
+      
+      #chatMessages {
+        height: 150px;
+      }
     }
     
     @media screen and (max-width: 480px) {
@@ -336,6 +452,16 @@
       .tab {
         margin: 2px 0;
         border-radius: 5px;
+      }
+      
+      #chatContainer {
+        width: 220px;
+        bottom: 60px;
+        right: 10px;
+      }
+      
+      #chatMessages {
+        height: 120px;
       }
     }
   </style>
@@ -420,6 +546,19 @@
     <div>YONI (O): <span id="scoreO">0</span> points</div>
   </div>
   
+  <!-- Chat Container -->
+  <div id="chatContainer">
+    <div id="chatHeader">
+      <span>Game Chat</span>
+      <span id="chatToggle">-</span>
+    </div>
+    <div id="chatMessages"></div>
+    <div id="chatInput">
+      <input type="text" id="messageInput" placeholder="Type a message...">
+      <button id="sendButton">Send</button>
+    </div>
+  </div>
+  
   <div id="mathModal">
     <div class="modal-content">
       <h2>Double Your Points!</h2>
@@ -478,6 +617,9 @@
     let isCameraAutoRotating = true;
     let lastFrameTime = 0;
     
+    // Chat variables
+    let chatCollapsed = false;
+    
     // Mode Selection
     document.getElementById('singlePcMode').addEventListener('click', () => {
       gameMode = 'singlePc';
@@ -494,6 +636,90 @@
     
     // Reset button event listener
     document.getElementById('resetButton').addEventListener('click', resetGame);
+    
+    // Chat UI event listeners
+    document.getElementById('chatHeader').addEventListener('click', toggleChat);
+    document.getElementById('sendButton').addEventListener('click', sendChatMessage);
+    document.getElementById('messageInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        sendChatMessage();
+      }
+    });
+    
+    // Toggle chat visibility
+    function toggleChat() {
+      const chatContainer = document.getElementById('chatContainer');
+      const chatToggle = document.getElementById('chatToggle');
+      
+      chatCollapsed = !chatCollapsed;
+      
+      if (chatCollapsed) {
+        chatContainer.classList.add('collapsed');
+        chatToggle.textContent = '+';
+      } else {
+        chatContainer.classList.remove('collapsed');
+        chatToggle.textContent = '-';
+      }
+    }
+    
+    // Send chat message
+    function sendChatMessage() {
+      const messageInput = document.getElementById('messageInput');
+      const message = messageInput.value.trim();
+      
+      if (message === '') return;
+      
+      const playerSymbol = gameMode === 'multiplayer' ? myPlayerSymbol : currentPlayer;
+      const playerName = playerSymbol === 'X' ? PLAYER_X : PLAYER_O;
+      
+      // Display message in chat
+      displayChatMessage(playerName, message, playerSymbol);
+      
+      // Send message to other player in multiplayer mode
+      if (gameMode === 'multiplayer' && connection && connection.open) {
+        sendGameMessage({
+          type: 'chat',
+          player: playerName,
+          playerSymbol: playerSymbol,
+          message: message
+        });
+      }
+      
+      // Clear input field
+      messageInput.value = '';
+    }
+    
+    // Display chat message
+    function displayChatMessage(playerName, message, playerSymbol) {
+      const chatMessages = document.getElementById('chatMessages');
+      const messageDiv = document.createElement('div');
+      
+      messageDiv.className = `message message-${playerName.toLowerCase()}`;
+      
+      const playerDiv = document.createElement('div');
+      playerDiv.className = 'message-player';
+      playerDiv.textContent = playerName;
+      
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'message-content';
+      contentDiv.textContent = message;
+      
+      messageDiv.appendChild(playerDiv);
+      messageDiv.appendChild(contentDiv);
+      
+      chatMessages.appendChild(messageDiv);
+      
+      // Scroll to bottom
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      
+      // If chat is collapsed, show it temporarily
+      if (chatCollapsed) {
+        toggleChat();
+        
+        // Optional: collapse chat again after a few seconds
+        // setTimeout(toggleChat, 5000);
+      }
+    }
     
     // Multiplayer Setup Tabs
     function setupMultiplayerTabs() {
@@ -571,6 +797,9 @@
       // Update game status text for host
       document.getElementById('gameStatus').textContent = "Lobby open. Waiting for opponent...";
       
+      // Add system message to chat
+      displayChatMessage("System", "You've created a game as TATI (X). Waiting for opponent to join...", "system");
+      
       console.log("Created multiplayer game with ID:", gameId);
     }
     
@@ -598,6 +827,9 @@
       document.getElementById('lobby').style.display = 'block';
       document.getElementById('lobbyMessage').textContent = "Connecting to host...";
       document.getElementById('lobbyStartBtn').style.display = 'none';
+      
+      // Add system message to chat
+      displayChatMessage("System", "You're joining a game as YONI (O). Connecting to host...", "system");
       
       console.log("Join multiplayer game with ID:", gameId);
     }
@@ -667,6 +899,9 @@
           player: myPlayerSymbol
         });
         
+        // Add system message to chat
+        displayChatMessage("System", "Connected to opponent!", "system");
+        
         // For host, update lobby UI to allow game start
         if (isHost) {
           document.getElementById('lobbyMessage').textContent = "Opponent joined! Click Start to begin.";
@@ -696,6 +931,7 @@
         console.log('Connection closed');
         peerConnected = false;
         updateConnectionStatus('disconnected', 'Connection closed');
+        displayChatMessage("System", "Connection to opponent lost", "system");
         alert('Connection to opponent lost.');
       });
       
@@ -746,11 +982,18 @@
           scoreO = message.scoreO;
           updateScoreDisplay();
           break;
+        case 'chat':
+          console.log('Received chat message:', message);
+          // Display the message from the other player
+          displayChatMessage(message.player, message.message, message.playerSymbol);
+          break;
         case 'start':
           console.log('Start game signal received.');
           gameStarted = true;
           currentPlayer = 'X';
           updateGameStatus();
+          // Add system message to chat
+          displayChatMessage("System", "Game started!", "system");
           // Hide all setup and lobby UI elements for joiner
           document.getElementById('lobby').style.display = 'none';
           document.getElementById('multiplayerSetup').style.display = 'none';
@@ -818,10 +1061,15 @@
         loadSavedGame();
         // Show reset button for single PC mode
         document.getElementById('resetButton').style.display = 'block';
+        // Clear and initialize chat for single PC mode
+        document.getElementById('chatMessages').innerHTML = '';
+        displayChatMessage("System", "Single PC Mode - Players can chat during the game", "system");
       } else {
         document.getElementById('connectionStatus').style.display = 'block';
         // In multiplayer mode, only show reset button for host
         document.getElementById('resetButton').style.display = isHost ? 'block' : 'none';
+        // Clear chat for multiplayer mode
+        document.getElementById('chatMessages').innerHTML = '';
       }
       
       // Setup 3D scene
@@ -913,6 +1161,10 @@
       currentPlayer = selectedPlayer;
       document.getElementById('playerSelector').style.display = 'none';
       updateGameStatus();
+      
+      // Add system message to chat
+      const startingPlayer = currentPlayer === 'X' ? PLAYER_X : PLAYER_O;
+      displayChatMessage("System", `Game started with ${startingPlayer} (${currentPlayer}) playing first`, "system");
     }
     
     // Start Multiplayer Game (Host clicking Start in lobby)
@@ -922,6 +1174,9 @@
       gameStarted = true;
       currentPlayer = 'X'; // Host (TATI) always starts as X
       updateGameStatus();
+      
+      // Add system message to chat
+      displayChatMessage("System", "Game started! TATI (X) plays first", "system");
       
       // Hide all setup and lobby UI elements
       document.getElementById('lobby').style.display = 'none';
@@ -1170,11 +1425,17 @@
         if (gameMode === 'multiplayer') {
           if (currentPlayer === myPlayerSymbol) {
             document.getElementById('gameStatus').textContent = `You win!`;
+            // Add chat message
+            displayChatMessage("System", "You won the game! 🎉", "system");
           } else {
             document.getElementById('gameStatus').textContent = `Opponent wins!`;
+            // Add chat message
+            displayChatMessage("System", "Opponent won the game!", "system");
           }
         } else {
           document.getElementById('gameStatus').textContent = `${winner} wins!`;
+          // Add chat message
+          displayChatMessage("System", `${winner} wins the game! 🎉`, "system");
         }
         triggerConfetti(currentPlayer);
         
@@ -1198,6 +1459,8 @@
       } else if (isBoardFull()) {
         gameOver = true;
         document.getElementById('gameStatus').textContent = "It's a draw!";
+        // Add chat message
+        displayChatMessage("System", "Game ended in a draw!", "system");
         scoreX += 2;
         scoreO += 2;
         updateScoreDisplay();
@@ -1427,13 +1690,16 @@
           mathDifficulty++;
           consecutiveCorrect = 0;
           alert("Correct! Your points have been doubled! The math challenges will now get a bit harder!");
+          displayChatMessage("System", "YONI solved the math problem correctly and doubled points! Math difficulty increased.", "system");
         } else {
           alert("Correct! Your points have been doubled!");
+          displayChatMessage("System", "YONI solved the math problem correctly and doubled points!", "system");
         }
         saveGame();
       } else {
         consecutiveCorrect = 0;
         alert("Sorry, that's incorrect. The correct answer is " + currentAnswer);
+        displayChatMessage("System", `YONI got the math problem wrong. The correct answer was ${currentAnswer}.`, "system");
         if (mathDifficulty > 1 && Math.random() < 0.3) {
           mathDifficulty--;
           saveGame();
@@ -1445,6 +1711,7 @@
     // Skip math question
     function skipMathQuestion() {
       document.getElementById('mathModal').style.display = 'none';
+      displayChatMessage("System", "YONI skipped the math challenge.", "system");
     }
     
     // Check if there's a winner
@@ -1566,6 +1833,9 @@
             currentPlayer = 'X';
             sendGameMessage({ type: 'reset' });
             updateGameStatus();
+            
+            // Add chat message
+            displayChatMessage("System", "Host reset the game.", "system");
           } else {
             document.getElementById('gameStatus').textContent = "Waiting for host to reset...";
           }
@@ -1573,6 +1843,9 @@
           gameStarted = false;
           document.getElementById('playerSelector').style.display = 'block';
           document.getElementById('gameStatus').textContent = "Select who starts";
+          
+          // Add chat message
+          displayChatMessage("System", "Game reset. Select who starts.", "system");
         }
         renderer.render(scene, camera);
       } catch (error) {
@@ -1596,6 +1869,9 @@
       currentPlayer = 'X';
       gameOver = false;
       updateGameStatus();
+      
+      // Add chat message
+      displayChatMessage("System", "Host reset the game.", "system");
     }
     
     // Handle keyboard controls
