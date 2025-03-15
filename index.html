@@ -138,6 +138,24 @@
       pointer-events: none;
     }
     
+    /* Audio controls */
+    #audioControls {
+      position: absolute;
+      top: 10px;
+      left: 20px;
+      background-color: rgba(255, 255, 255, 0.8);
+      padding: 10px;
+      border-radius: 5px;
+      z-index: 100;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+    }
+    
+    #audioControls label {
+      margin-right: 8px;
+    }
+    
     /* Mode selector styles */
     #modeSelector {
       position: fixed;
@@ -468,6 +486,32 @@
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
 </head>
 <body>
+  <!-- Audio elements for game sounds -->
+  <audio id="moveXSound" preload="auto">
+    <source src="https://assets.mixkit.co/active_storage/sfx/3005/3005-preview.mp3" type="audio/mp3">
+  </audio>
+  <audio id="moveOSound" preload="auto">
+    <source src="https://assets.mixkit.co/active_storage/sfx/2020/2020-preview.mp3" type="audio/mp3">
+  </audio>
+  <audio id="winSound" preload="auto">
+    <source src="https://assets.mixkit.co/active_storage/sfx/2/2-preview.mp3" type="audio/mp3">
+  </audio>
+  <audio id="mathCorrectSound" preload="auto">
+    <source src="https://assets.mixkit.co/active_storage/sfx/1009/1009-preview.mp3" type="audio/mp3">
+  </audio>
+  <audio id="mathIncorrectSound" preload="auto">
+    <source src="https://assets.mixkit.co/active_storage/sfx/979/979-preview.mp3" type="audio/mp3">
+  </audio>
+  <audio id="drawSound" preload="auto">
+    <source src="https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3" type="audio/mp3">
+  </audio>
+
+  <!-- Audio controls -->
+  <div id="audioControls">
+    <label for="soundToggle">Sound:</label>
+    <input type="checkbox" id="soundToggle" checked>
+  </div>
+  
   <!-- Mode Selector Screen -->
   <div id="modeSelector">
     <div class="mode-card" id="singlePcMode">
@@ -596,6 +640,17 @@
     let scoreX = 0;
     let scoreO = 0;
     
+    // Sound settings
+    let soundEnabled = true;
+
+    // Audio elements
+    const moveXSound = document.getElementById('moveXSound');
+    const moveOSound = document.getElementById('moveOSound');
+    const winSound = document.getElementById('winSound');
+    const mathCorrectSound = document.getElementById('mathCorrectSound');
+    const mathIncorrectSound = document.getElementById('mathIncorrectSound');
+    const drawSound = document.getElementById('drawSound');
+    
     // Multiplayer variables
     let peer;
     let connection;
@@ -620,6 +675,34 @@
     
     // Chat variables
     let chatCollapsed = false;
+
+    // Sound toggle event listener
+    document.getElementById('soundToggle').addEventListener('change', function() {
+      soundEnabled = this.checked;
+      console.log('Sound ' + (soundEnabled ? 'enabled' : 'disabled'));
+    });
+
+    // Function to play sound
+    function playSound(sound) {
+      if (soundEnabled) {
+        // Stop and reset the sound before playing to allow rapid replays
+        sound.pause();
+        sound.currentTime = 0;
+        sound.play().catch(error => {
+          console.log('Sound play error: ', error);
+        });
+      }
+    }
+
+    // Function to share sound event with other player in multiplayer
+    function shareSoundEvent(soundType) {
+      if (gameMode === 'multiplayer' && connection && connection.open) {
+        sendGameMessage({
+          type: 'sound',
+          soundType: soundType
+        });
+      }
+    }
     
     // Mode Selection
     document.getElementById('singlePcMode').addEventListener('click', () => {
@@ -1030,14 +1113,29 @@
             updateScoreDisplay();
             saveGame();
             
-            // Display message about the result
+            // Play appropriate sound
             if (message.success) {
+              playSound(mathCorrectSound);
               displayChatMessage("System", "YONI solved the math problem correctly and doubled points!", "system");
             } else if (message.skipped) {
               displayChatMessage("System", "YONI skipped the math challenge.", "system");
             } else {
+              playSound(mathIncorrectSound);
               displayChatMessage("System", `YONI got the math problem wrong. The correct answer was ${message.correctAnswer}.`, "system");
             }
+          }
+          break;
+        case 'sound':
+          // Handle sound events shared from the other player
+          console.log('Received sound event:', message.soundType);
+          if (message.soundType === 'moveX') {
+            playSound(moveXSound);
+          } else if (message.soundType === 'moveO') {
+            playSound(moveOSound);
+          } else if (message.soundType === 'win') {
+            playSound(winSound);
+          } else if (message.soundType === 'draw') {
+            playSound(drawSound);
           }
           break;
         default:
@@ -1365,6 +1463,22 @@
       }
       if (!gameStarted || gameOver || board[row][col] !== null) return;
       board[row][col] = currentPlayer;
+      
+      // Play the appropriate sound for the current player
+      if (currentPlayer === 'X') {
+        playSound(moveXSound);
+        // Share sound in multiplayer mode
+        if (gameMode === 'multiplayer' && !fromOpponent) {
+          shareSoundEvent('moveX');
+        }
+      } else {
+        playSound(moveOSound);
+        // Share sound in multiplayer mode
+        if (gameMode === 'multiplayer' && !fromOpponent) {
+          shareSoundEvent('moveO');
+        }
+      }
+      
       if (gameMode === 'multiplayer' && !fromOpponent) {
         sendGameMessage({
           type: 'move',
@@ -1456,6 +1570,14 @@
         // Determine the loser (the opposite symbol)
         const loser = currentPlayer === 'X' ? 'O' : 'X';
         
+        // Play victory sound
+        playSound(winSound);
+        
+        // Share sound in multiplayer mode
+        if (gameMode === 'multiplayer' && !fromOpponent) {
+          shareSoundEvent('win');
+        }
+        
         if (gameMode === 'multiplayer') {
           if (currentPlayer === myPlayerSymbol) {
             document.getElementById('gameStatus').textContent = `You win!`;
@@ -1513,6 +1635,15 @@
       } else if (isBoardFull()) {
         gameOver = true;
         document.getElementById('gameStatus').textContent = "It's a draw!";
+        
+        // Play draw sound
+        playSound(drawSound);
+        
+        // Share sound in multiplayer mode
+        if (gameMode === 'multiplayer' && !fromOpponent) {
+          shareSoundEvent('draw');
+        }
+        
         // Add chat message
         displayChatMessage("System", "Game ended in a draw!", "system");
         scoreX += 2;
@@ -1742,6 +1873,10 @@
         scoreO += 10;
         updateScoreDisplay();
         consecutiveCorrect++;
+        
+        // Play correct sound
+        playSound(mathCorrectSound);
+        
         if (consecutiveCorrect >= 3 && mathDifficulty < 3) {
           mathDifficulty++;
           consecutiveCorrect = 0;
@@ -1754,6 +1889,10 @@
         success = true;
       } else {
         consecutiveCorrect = 0;
+        
+        // Play incorrect sound
+        playSound(mathIncorrectSound);
+        
         alert("Sorry, that's incorrect. The correct answer is " + currentAnswer);
         displayChatMessage("System", `YONI got the math problem wrong. The correct answer was ${currentAnswer}.`, "system");
         if (mathDifficulty > 1 && Math.random() < 0.3) {
