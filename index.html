@@ -550,42 +550,54 @@
         
         // Initialize PeerJS
         function initPeer(id = null) {
-            try {
-                updateConnectionStatus('connecting', 'Initializing connection...');
-                
-                // Create a new Peer with a random ID if not specified
-                peer = new Peer(id);
-                
-                peer.on('open', (id) => {
-                    console.log('My peer ID is: ' + id);
-                    updateConnectionStatus('connecting', isHost ? 'Waiting for opponent...' : 'Connecting to game...');
-                    
-                    if (isHost) {
-                        // Wait for incoming connection
-                        peer.on('connection', (conn) => {
-                            connection = conn;
-                            setupConnectionHandlers();
-                        });
-                    }
-                });
-                
-                peer.on('error', (err) => {
-                    console.error('PeerJS error:', err);
-                    updateConnectionStatus('disconnected', 'Connection error: ' + err.type);
-                    alert('Connection error: ' + err.message);
-                });
-            } catch (error) {
-                console.error("Error initializing PeerJS:", error);
-                alert("Error setting up multiplayer: " + error.message);
-            }
+    try {
+        updateConnectionStatus('connecting', 'Initializing connection...');
+        
+        // Create a new Peer (with a provided id if host)
+        peer = new Peer(id);
+        
+        // Register connection handler immediately if host
+        if (isHost) {
+            peer.on('connection', (conn) => {
+                console.log('Host received connection!');
+                connection = conn;
+                setupConnectionHandlers();
+            });
         }
+        
+        peer.on('open', (id) => {
+            console.log('My peer ID is: ' + id);
+            updateConnectionStatus('connecting', isHost ? 'Waiting for opponent...' : 'Connecting to game...');
+        });
+        
+        peer.on('error', (err) => {
+            console.error('PeerJS error:', err);
+            updateConnectionStatus('disconnected', 'Connection error: ' + err.type);
+            alert('Connection error: ' + err.message);
+        });
+    } catch (error) {
+        console.error("Error initializing PeerJS:", error);
+        alert("Error setting up multiplayer: " + error.message);
+    }
+}
         
         // Connect to peer
         function connectToPeer(peerId) {
             try {
                 console.log("Connecting to peer:", peerId);
                 connection = peer.connect(peerId);
-                setupConnectionHandlers();
+                console.log("Connection object created:", connection);
+                
+                // Add a small delay to ensure the connection object is properly initialized
+                setTimeout(() => {
+                    if (connection) {
+                        console.log("Setting up connection handlers after delay");
+                        setupConnectionHandlers();
+                    } else {
+                        console.error("Connection object not available after delay");
+                        alert("Failed to establish connection. Please try again.");
+                    }
+                }, 500);
             } catch (error) {
                 console.error("Error connecting to peer:", error);
                 alert("Error connecting to game: " + error.message);
@@ -598,6 +610,9 @@
                 console.error("No connection object available");
                 return;
             }
+            
+            console.log("Setting up connection handlers for connection:", connection);
+            
             
             connection.on('open', () => {
                 console.log('Connected to peer!');
