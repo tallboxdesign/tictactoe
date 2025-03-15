@@ -687,8 +687,9 @@
           gameStarted = true;
           currentPlayer = 'X';
           updateGameStatus();
-          // Hide lobby UI for joiner
+          // Hide all setup and lobby UI elements for joiner
           document.getElementById('lobby').style.display = 'none';
+          document.getElementById('multiplayerSetup').style.display = 'none';
           break;
         default:
           console.warn('Unknown message type:', message.type);
@@ -803,8 +804,11 @@
       gameStarted = true;
       currentPlayer = 'X'; // Host (TATI) always starts as X
       updateGameStatus();
-      // Hide lobby UI
+      
+      // Hide all setup and lobby UI elements
       document.getElementById('lobby').style.display = 'none';
+      document.getElementById('multiplayerSetup').style.display = 'none';
+      
       // Send start signal to joiner
       sendGameMessage({ type: 'start' });
     }
