@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>5x5 Tic-Tac-Toe - YONI vs TATI</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: #333;
+            font-size: 18px;
+            z-index: 100;
+            pointer-events: none;
+        }
+        #gameStatus {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: #333;
+            font-size: 24px;
+            font-weight: bold;
+            z-index: 100;
+            pointer-events: none;
+        }
+        #resetButton {
+            position: absolute;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 100;
+        }
+        #resetButton:hover {
+            background-color: #45a049;
+        }
+        #scoreBoard {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+            font-size: 16px;
+        }
+        #mathModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+        }
+        #answerInput {
+            margin: 20px 0;
+            padding: 10px;
+            font-size: 18px;
+            width: 100px;
+        }
+        .btn {
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .btn:hover {
+            background-color: #45a049;
+        }
+        #mathQuestion {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 20px 0;
+            min-height: 60px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">5x5 Tic-Tac-Toe (Connect 4) - X: TATI, O: YONI</div>
+    <div id="gameStatus">TATI's turn (X)</div>
+    <button id="resetButton" onclick="resetGame()">Reset Game</button>
+    
+    <div id="scoreBoard">
+        <div>TATI (X): <span id="scoreX">0</span> points</div>
+        <div>YONI (O): <span id="scoreO">0</span> points</div>
+    </div>
+    
+    <div id="mathModal">
+        <div class="modal-content">
+            <h2>Double Your Points!</h2>
+            <p>YONI, solve this math problem to double your points:</p>
+            <div id="mathQuestion"></div>
+            <input type="number" id="answerInput" placeholder="Answer">
+            <div>
+                <button class="btn" id="submitAnswer">Submit</button>
+                <button class="btn" id="skipQuestion" style="background-color: #f44336;">Skip</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Game variables
+        let scene, camera, renderer;
+        let board = [];
+        let currentPlayer = 'X';
+        let gameOver = false;
+        const BOARD_SIZE = 5;
+        const CELL_SIZE = 1;
+        const WINNING_LENGTH = 4;
+        const SPACING = 0.1;
+        const TOTAL_SIZE = BOARD_SIZE * (CELL_SIZE + SPACING) - SPACING;
+        const OFFSET = TOTAL_SIZE / 2 - CELL_SIZE / 2;
+        
+        // Player names and scores
+        const PLAYER_X = "TATI";
+        const PLAYER_O = "YONI";
+        let scoreX = 0;
+        let scoreO = 0;
+        
+        // Math challenge variables
+        let currentAnswer = 0;
+        let mathDifficulty = 1; // Start with easy questions
+        let consecutiveCorrect = 0;
+        
+        // Load saved scores from local storage
+        function loadSavedGame() {
+            if (localStorage.getItem('tictactoeScores')) {
+                const savedData = JSON.parse(localStorage.getItem('tictactoeScores'));
+                scoreX = savedData.scoreX || 0;
+                scoreO = savedData.scoreO || 0;
+                mathDifficulty = savedData.mathDifficulty || 1;
+                consecutiveCorrect = savedData.consecutiveCorrect || 0;
+                updateScoreDisplay();
+            }
+        }
+        
+        // Save game state to local storage
+        function saveGame() {
+            const gameData = {
+                scoreX: scoreX,
+                scoreO: scoreO,
+                mathDifficulty: mathDifficulty,
+                consecutiveCorrect: consecutiveCorrect
+            };
+            localStorage.setItem('tictactoeScores', JSON.stringify(gameData));
+        }
+
+        // Initialize the scene
+        function init() {
+            // Load saved game
+            loadSavedGame();
+            
+            // Create the scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf0f0f0);
+
+            // Create the camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 8, 8);
+            camera.lookAt(0, 0, 0);
+
+            // Create the renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Add lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+
+            // Create the board base
+            const baseGeometry = new THREE.BoxGeometry(TOTAL_SIZE + 0.5, 0.2, TOTAL_SIZE + 0.5);
+            const baseMaterial = new THREE.MeshStandardMaterial({ color: 0x555555 });
+            const base = new THREE.Mesh(baseGeometry, baseMaterial);
+            base.position.y = -0.15;
+            scene.add(base);
+
+            // Create the grid
+            createGrid();
+
+            // Add event listeners
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('mousedown', onMouseDown);
+            document.getElementById('submitAnswer').addEventListener('click', checkMathAnswer);
+            document.getElementById('skipQuestion').addEventListener('click', skipMathQuestion);
+            
+            // Update the game status
+            updateGameStatus();
+        }
+
+        // Create the grid
+        function createGrid() {
+            board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
+            
+            // Create cells
+            for (let i = 0; i < BOARD_SIZE; i++) {
+                for (let j = 0; j < BOARD_SIZE; j++) {
+                    // Create a cell
+                    const cellGeometry = new THREE.BoxGeometry(CELL_SIZE, 0.1, CELL_SIZE);
+                    const cellMaterial = new THREE.MeshStandardMaterial({ 
+                        color: 0xffffff,
+                        transparent: true,
+                        opacity: 0.8
+                    });
+                    const cell = new THREE.Mesh(cellGeometry, cellMaterial);
+                    
+                    // Position the cell
+                    const x = i * (CELL_SIZE + SPACING) - OFFSET;
+                    const z = j * (CELL_SIZE + SPACING) - OFFSET;
+                    cell.position.set(x, 0, z);
+                    
+                    // Store cell metadata
+                    cell.userData = { row: i, col: j, type: 'cell' };
+                    
+                    scene.add(cell);
+                }
+            }
+        }
+
+        // Update game status display
+        function updateGameStatus() {
+            const playerName = currentPlayer === 'X' ? PLAYER_X : PLAYER_O;
+            document.getElementById('gameStatus').textContent = `${playerName}'s turn (${currentPlayer})`;
+        }
+        
+        // Update score display
+        function updateScoreDisplay() {
+            document.getElementById('scoreX').textContent = scoreX;
+            document.getElementById('scoreO').textContent = scoreO;
+        }
+
+        // Place a mark on the board
+        function placeMark(row, col) {
+            if (gameOver || board[row][col] !== null) return;
+
+            board[row][col] = currentPlayer;
+            
+            // Create X or O geometry
+            let markGeometry, markMaterial;
+            if (currentPlayer === 'X') {
+                // Create X using two boxes
+                const group = new THREE.Group();
+                
+                const xBar1 = new THREE.BoxGeometry(0.1, 0.2, 0.8);
+                const xBar2 = new THREE.BoxGeometry(0.1, 0.2, 0.8);
+                const xMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+                
+                const xMesh1 = new THREE.Mesh(xBar1, xMaterial);
+                const xMesh2 = new THREE.Mesh(xBar2, xMaterial);
+                
+                xMesh1.rotation.y = Math.PI / 4;
+                xMesh2.rotation.y = -Math.PI / 4;
+                
+                group.add(xMesh1);
+                group.add(xMesh2);
+                
+                markGeometry = group;
+                markMaterial = null;
+            } else {
+                // Create O using a torus
+                markGeometry = new THREE.TorusGeometry(0.3, 0.1, 16, 32);
+                markMaterial = new THREE.MeshStandardMaterial({ color: 0x0000ff });
+            }
+
+            // Create the mark mesh
+            let mark;
+            if (currentPlayer === 'X') {
+                mark = markGeometry;
+            } else {
+                mark = new THREE.Mesh(markGeometry, markMaterial);
+                mark.rotation.x = Math.PI / 2;
+            }
+            
+            // Position the mark
+            const x = row * (CELL_SIZE + SPACING) - OFFSET;
+            const z = col * (CELL_SIZE + SPACING) - OFFSET;
+            mark.position.set(x, 0.2, z);
+            
+            mark.userData = { type: 'mark', player: currentPlayer, row, col };
+            scene.add(mark);
+
+            // Check for a winner
+            if (checkWinner(row, col)) {
+                gameOver = true;
+                const winner = currentPlayer === 'X' ? PLAYER_X : PLAYER_O;
+                document.getElementById('gameStatus').textContent = `${winner} wins!`;
+                
+                // Award points
+                if (currentPlayer === 'X') {
+                    scoreX += 10;
+                    updateScoreDisplay();
+                    saveGame();
+                } else {
+                    // YONI wins, show math question
+                    scoreO += 10;
+                    updateScoreDisplay();
+                    saveGame();
+                    setTimeout(showMathQuestion, 1500);
+                }
+                
+                highlightWinningCells();
+            } else if (isBoardFull()) {
+                gameOver = true;
+                document.getElementById('gameStatus').textContent = "It's a draw!";
+                // Award 2 points each for a draw
+                scoreX += 2;
+                scoreO += 2;
+                updateScoreDisplay();
+                saveGame();
+            } else {
+                // Switch players
+                currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+                updateGameStatus();
+            }
+        }
+        
+        // Generate a basic math question
+        function generateBasicMathQuestion() {
+            const operations = ['+', '-', '*'];
+            let num1, num2, operation, answer;
+            
+            // Choose operation based on difficulty
+            if (mathDifficulty === 1) {
+                // Easy - just addition and subtraction with small numbers
+                operation = operations[Math.floor(Math.random() * 2)]; // + or -
+                num1 = Math.floor(Math.random() * 20) + 1;
+                num2 = operation === '-' ? Math.floor(Math.random() * num1) + 1 : Math.floor(Math.random() * 20) + 1;
+            } else if (mathDifficulty === 2) {
+                // Medium - all operations with medium numbers
+                operation = operations[Math.floor(Math.random() * 3)]; // +, -, or *
+                if (operation === '*') {
+                    num1 = Math.floor(Math.random() * 10) + 1;
+                    num2 = Math.floor(Math.random() * 10) + 1;
+                } else {
+                    num1 = Math.floor(Math.random() * 50) + 1;
+                    num2 = operation === '-' ? Math.floor(Math.random() * num1) + 1 : Math.floor(Math.random() * 50) + 1;
+                }
+            } else {
+                // Hard - all operations with larger numbers
+                operation = operations[Math.floor(Math.random() * 3)];
+                if (operation === '*') {
+                    num1 = Math.floor(Math.random() * 12) + 1;
+                    num2 = Math.floor(Math.random() * 12) + 1;
+                } else {
+                    num1 = Math.floor(Math.random() * 100) + 1;
+                    num2 = operation === '-' ? Math.floor(Math.random() * num1) + 1 : Math.floor(Math.random() * 100) + 1;
+                }
+            }
+            
+            // Calculate answer
+            switch (operation) {
+                case '+': answer = num1 + num2; break;
+                case '-': answer = num1 - num2; break;
+                case '*': answer = num1 * num2; break;
+            }
+            
+            return {
+                question: `${num1} ${operation} ${num2} = ?`,
+                answer: answer,
+                type: 'basic'
+            };
+        }
+        
+        // Generate a word problem
+        function generateWordProblem() {
+            const problemTypes = [
+                'apples', 'cookies', 'books', 'toys', 'stickers',
+                'cards', 'pencils', 'marbles', 'stamps', 'balloons'
+            ];
+            
+            const itemType = problemTypes[Math.floor(Math.random() * problemTypes.length)];
+            let num1, num2, answer, question;
+            const operation = Math.floor(Math.random() * 3); // 0=add, 1=subtract, 2=multiply
+            
+            switch(operation) {
+                case 0: // Addition
+                    num1 = Math.floor(Math.random() * (mathDifficulty * 20)) + 1;
+                    num2 = Math.floor(Math.random() * (mathDifficulty * 20)) + 1;
+                    question = `YONI has ${num1} ${itemType}. TATI gives her ${num2} more ${itemType}. How many ${itemType} does YONI have now?`;
+                    answer = num1 + num2;
+                    break;
+                    
+                case 1: // Subtraction
+                    num1 = Math.floor(Math.random() * (mathDifficulty * 30)) + (mathDifficulty * 10);
+                    num2 = Math.floor(Math.random() * num1) + 1;
+                    question = `YONI has ${num1} ${itemType}. She gives ${num2} ${itemType} to TATI. How many ${itemType} does YONI have left?`;
+                    answer = num1 - num2;
+                    break;
+                    
+                case 2: // Multiplication
+                    if (mathDifficulty === 1) {
+                        num1 = Math.floor(Math.random() * 5) + 1;
+                        num2 = Math.floor(Math.random() * 5) + 1;
+                    } else if (mathDifficulty === 2) {
+                        num1 = Math.floor(Math.random() * 10) + 1;
+                        num2 = Math.floor(Math.random() * 10) + 1;
+                    } else {
+                        num1 = Math.floor(Math.random() * 12) + 1;
+                        num2 = Math.floor(Math.random() * 12) + 1;
+                    }
+                    question = `YONI has ${num1} bags of ${itemType}. Each bag has ${num2} ${itemType}. How many ${itemType} does YONI have in total?`;
+                    answer = num1 * num2;
+                    break;
+            }
+            
+            return {
+                question,
+                answer,
+                type: 'word'
+            };
+        }
+        
+        // Generate a missing number problem
+        function generateMissingNumberProblem() {
+            const operations = ['+', '-', '*'];
+            let num1, num2, answer, missingPosition, question;
+            
+            // Choose operation based on difficulty
+            const operation = operations[Math.floor(Math.random() * (mathDifficulty < 3 ? 2 : 3))];
+            
+            // Generate numbers based on difficulty and operation
+            if (operation === '*') {
+                num1 = Math.floor(Math.random() * (mathDifficulty * 4)) + 1;
+                num2 = Math.floor(Math.random() * (mathDifficulty * 4)) + 1;
+            } else {
+                num1 = Math.floor(Math.random() * (mathDifficulty * 30)) + 1;
+                num2 = operation === '-' ? Math.floor(Math.random() * num1) + 1 : Math.floor(Math.random() * (mathDifficulty * 30)) + 1;
+            }
+            
+            // Calculate result
+            switch (operation) {
+                case '+': answer = num1 + num2; break;
+                case '-': answer = num1 - num2; break;
+                case '*': answer = num1 * num2; break;
+            }
+            
+            // Decide which number to hide (1, 2, or result)
+            missingPosition = Math.floor(Math.random() * 3);
+            
+            if (missingPosition === 0) {
+                // First number is missing
+                question = `? ${operation} ${num2} = ${answer}`;
+                answer = num1;
+            } else if (missingPosition === 1) {
+                // Second number is missing
+                question = `${num1} ${operation} ? = ${answer}`;
+                answer = num2;
+            } else {
+                // Result is missing (default case from earlier)
+                question = `${num1} ${operation} ${num2} = ?`;
+            }
+            
+            return {
+                question,
+                answer,
+                type: 'missing'
+            };
+        }
+        
+        // Generate a multi-step problem (harder)
+        function generateMultiStepProblem() {
+            let num1, num2, num3, answer, question;
+            
+            if (mathDifficulty === 3) {
+                // Hard - three operations
+                num1 = Math.floor(Math.random() * 20) + 1;
+                num2 = Math.floor(Math.random() * 20) + 1;
+                num3 = Math.floor(Math.random() * 10) + 1;
+                
+                const problemType = Math.floor(Math.random() * 3);
+                
+                switch(problemType) {
+                    case 0:
+                        question = `${num1} + ${num2} × ${num3} = ?`;
+                        answer = num1 + (num2 * num3);
+                        break;
+                    case 1:
+                        if (num1 >= num2) {
+                            question = `${num1} - ${num2} + ${num3} = ?`;
+                            answer = num1 - num2 + num3;
+                        } else {
+                            question = `${num2} - ${num1} + ${num3} = ?`;
+                            answer = num2 - num1 + num3;
+                        }
+                        break;
+                    case 2:
+                        question = `(${num1} + ${num2}) × ${num3} = ?`;
+                        answer = (num1 + num2) * num3;
+                        break;
+                }
+            } else {
+                // Medium - two operations
+                num1 = Math.floor(Math.random() * 10) + 1;
+                num2 = Math.floor(Math.random() * 10) + 1;
+                num3 = Math.floor(Math.random() * 10) + 1;
+                
+                const problemType = Math.floor(Math.random() * 2);
+                
+                switch(problemType) {
+                    case 0:
+                        question = `${num1} + ${num2} + ${num3} = ?`;
+                        answer = num1 + num2 + num3;
+                        break;
+                    case 1:
+                        if (num1 + num2 >= num3) {
+                            question = `${num1} + ${num2} - ${num3} = ?`;
+                            answer = num1 + num2 - num3;
+                        } else {
+                            question = `${num3} - ${num1} - ${num2} = ?`;
+                            answer = num3 - num1 - num2;
+                        }
+                        break;
+                }
+            }
+            
+            return {
+                question,
+                answer,
+                type: 'multi'
+            };
+        }
+        
+        // Generate a math question based on current difficulty
+        function generateMathQuestion() {
+            let questionType;
+            
+            // Choose question type based on difficulty
+            if (mathDifficulty === 1) {
+                // Easy - only basic or word problems
+                questionType = Math.random() < 0.7 ? 'basic' : 'word';
+            } else if (mathDifficulty === 2) {
+                // Medium - add missing number problems
+                const rand = Math.random();
+                if (rand < 0.4) questionType = 'basic';
+                else if (rand < 0.7) questionType = 'word';
+                else if (rand < 0.9) questionType = 'missing';
+                else questionType = 'multi';
+            } else {
+                // Hard - all types with equal chance
+                const rand = Math.random();
+                if (rand < 0.25) questionType = 'basic';
+                else if (rand < 0.5) questionType = 'word';
+                else if (rand < 0.75) questionType = 'missing';
+                else questionType = 'multi';
+            }
+            
+            // Generate the chosen question type
+            switch (questionType) {
+                case 'basic': return generateBasicMathQuestion();
+                case 'word': return generateWordProblem();
+                case 'missing': return generateMissingNumberProblem();
+                case 'multi': return generateMultiStepProblem();
+                default: return generateBasicMathQuestion();
+            }
+        }
+        
+        // Show math question modal
+        function showMathQuestion() {
+            const mathProblem = generateMathQuestion();
+            document.getElementById('mathQuestion').textContent = mathProblem.question;
+            currentAnswer = mathProblem.answer;
+            
+            document.getElementById('answerInput').value = '';
+            document.getElementById('mathModal').style.display = 'flex';
+        }
+        
+        // Check math answer
+        function checkMathAnswer() {
+            const userAnswer = parseInt(document.getElementById('answerInput').value);
+            
+            if (userAnswer === currentAnswer) {
+                // Double points for correct answer
+                scoreO += 10;
+                updateScoreDisplay();
+                
+                // Increase consecutive correct count
+                consecutiveCorrect++;
+                
+                // Increase difficulty after 3 consecutive correct answers
+                if (consecutiveCorrect >= 3 && mathDifficulty < 3) {
+                    mathDifficulty++;
+                    consecutiveCorrect = 0;
+                    alert("Correct! Your points have been doubled! The math challenges will now get a bit harder!");
+                } else {
+                    alert("Correct! Your points have been doubled!");
+                }
+                
+                saveGame();
+            } else {
+                consecutiveCorrect = 0;
+                alert("Sorry, that's incorrect. The correct answer is " + currentAnswer);
+                
+                // Decrease difficulty if too hard
+                if (mathDifficulty > 1 && Math.random() < 0.3) {
+                    mathDifficulty--;
+                    saveGame();
+                }
+            }
+            
+            document.getElementById('mathModal').style.display = 'none';
+        }
+        
+        // Skip math question
+        function skipMathQuestion() {
+            document.getElementById('mathModal').style.display = 'none';
+        }
+
+        // Check if there's a winner
+        function checkWinner(row, col) {
+            const directions = [
+                [0, 1],   // horizontal
+                [1, 0],   // vertical
+                [1, 1],   // diagonal top-left to bottom-right
+                [1, -1]   // diagonal top-right to bottom-left
+            ];
+
+            for (const [dx, dy] of directions) {
+                let count = 1;
+                
+                // Check forward
+                for (let i = 1; i < WINNING_LENGTH; i++) {
+                    const newRow = row + dx * i;
+                    const newCol = col + dy * i;
+                    if (isValidCell(newRow, newCol) && board[newRow][newCol] === currentPlayer) {
+                        count++;
+                    } else {
+                        break;
+                    }
+                }
+                
+                // Check backward
+                for (let i = 1; i < WINNING_LENGTH; i++) {
+                    const newRow = row - dx * i;
+                    const newCol = col - dy * i;
+                    if (isValidCell(newRow, newCol) && board[newRow][newCol] === currentPlayer) {
+                        count++;
+                    } else {
+                        break;
+                    }
+                }
+                
+                if (count >= WINNING_LENGTH) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
+        // Check if the cell is valid
+        function isValidCell(row, col) {
+            return row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE;
+        }
+
+        // Check if the board is full
+        function isBoardFull() {
+            for (let i = 0; i < BOARD_SIZE; i++) {
+                for (let j = 0; j < BOARD_SIZE; j++) {
+                    if (board[i][j] === null) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        // Highlight winning cells
+        function highlightWinningCells() {
+            // Animation loop for winning cells
+            const winningAnimation = () => {
+                scene.traverse((object) => {
+                    if (object.userData && object.userData.type === 'mark' && object.userData.player === currentPlayer) {
+                        if (object.userData.player === 'X') {
+                            // Animate X
+                            object.rotation.y += 0.02;
+                            object.position.y = 0.2 + Math.sin(Date.now() * 0.005) * 0.1;
+                        } else {
+                            // Animate O
+                            object.rotation.z += 0.02;
+                            object.position.y = 0.2 + Math.sin(Date.now() * 0.005) * 0.1;
+                        }
+                    }
+                });
+                
+                if (gameOver) {
+                    requestAnimationFrame(winningAnimation);
+                }
+            };
+            
+            winningAnimation();
+        }
+
+        // Reset the game
+        function resetGame() {
+            try {
+                // Find and remove all mark objects
+                const objectsToRemove = [];
+                scene.traverse((object) => {
+                    if (object.userData && object.userData.type === 'mark') {
+                        objectsToRemove.push(object);
+                    }
+                });
+                
+                // Remove objects from scene
+                for (const object of objectsToRemove) {
+                    scene.remove(object);
+                }
+                
+                // Reset game state
+                board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
+                currentPlayer = 'X';
+                gameOver = false;
+                
+                // Update display
+                document.getElementById('gameStatus').textContent = `${PLAYER_X}'s turn (X)`;
+                
+                // Force render update
+                renderer.render(scene, camera);
+            } catch (error) {
+                console.error("Error resetting game:", error);
+            }
+        }
+
+        // Handle mouse click
+        function onMouseDown(event) {
+            if (gameOver) return;
+            
+            const mouse = new THREE.Vector2();
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, camera);
+            
+            const intersects = raycaster.intersectObjects(scene.children);
+            
+            for (let i = 0; i < intersects.length; i++) {
+                const intersect = intersects[i];
+                const object = intersect.object;
+                
+                if (object.userData && object.userData.type === 'cell') {
+                    const { row, col } = object.userData;
+                    placeMark(row, col);
+                    break;
+                }
+            }
+        }
+
+        // Handle window resize
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Rotate camera slightly for a more dynamic view
+            camera.position.x = 8 * Math.sin(Date.now() * 0.0001);
+            camera.position.z = 8 * Math.cos(Date.now() * 0.0001);
+            camera.lookAt(0, 0, 0);
+            
+            renderer.render(scene, camera);
+        }
+
+        // Initialize and start the game
+        init();
+        animate();
+    </script>
+</body>
+</html>
