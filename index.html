@@ -277,6 +277,20 @@
       margin: 20px 0;
       color: #666;
     }
+    
+    /* Lobby UI for multiplayer */
+    #lobby {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: rgba(255,255,255,0.9);
+      padding: 20px;
+      border-radius: 5px;
+      z-index: 1100;
+      text-align: center;
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
 </head>
@@ -324,6 +338,12 @@
         <button class="btn" id="cancelSetupBtn" style="background-color: #f44336;">Cancel</button>
       </div>
     </div>
+  </div>
+  
+  <!-- Lobby UI for Multiplayer -->
+  <div id="lobby">
+    <div id="lobbyMessage">Waiting for opponent to join...</div>
+    <button id="lobbyStartBtn" class="btn" style="display:none; margin-top:10px;">Start Game</button>
   </div>
   
   <!-- Connection Status -->
@@ -421,14 +441,9 @@
       const tabs = document.querySelectorAll('.tab');
       tabs.forEach(tab => {
         tab.addEventListener('click', () => {
-          // Remove active class from all tabs and contents
           document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
           document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-          
-          // Add active class to clicked tab
           tab.classList.add('active');
-          
-          // Show corresponding content
           const tabId = tab.getAttribute('data-tab');
           if (tabId === 'create') {
             document.getElementById('createGame').classList.add('active');
@@ -438,13 +453,8 @@
         });
       });
       
-      // Generate Game ID Button
       document.getElementById('generateGameBtn').addEventListener('click', createMultiplayerGame);
-      
-      // Join Game Button
       document.getElementById('joinGameBtn').addEventListener('click', joinMultiplayerGame);
-      
-      // Copy Game ID Button
       document.getElementById('copyButton').addEventListener('click', () => {
         const gameIdText = document.getElementById('gameIdDisplay').textContent;
         navigator.clipboard.writeText(gameIdText).then(() => {
@@ -453,17 +463,12 @@
           console.error('Could not copy text: ', err);
         });
       });
-      
-      // Cancel Button - Return to mode selection
       document.getElementById('cancelSetupBtn').addEventListener('click', () => {
-        // Reset multiplayer setup state
         document.getElementById('gameIdDisplay').style.display = 'none';
         document.getElementById('copyButton').style.display = 'none';
         document.getElementById('waitingMessage').style.display = 'none';
         document.getElementById('generateGameBtn').style.display = 'block';
         document.getElementById('gameIdInput').value = '';
-        
-        // Close any active peer connections
         if (peer) {
           peer.destroy();
           peer = null;
@@ -472,101 +477,85 @@
           connection.close();
           connection = null;
         }
-        
-        // Reset connection status
         document.getElementById('connectionStatus').style.display = 'none';
-        
-        // Hide multiplayer setup and show mode selector
         document.getElementById('multiplayerSetup').style.display = 'none';
         document.getElementById('modeSelector').style.display = 'flex';
       });
     }
     
-    // Create Multiplayer Game
+    // Create Multiplayer Game (Host)
     function createMultiplayerGame() {
       isHost = true;
       myPlayerSymbol = 'X'; // Host is TATI (X)
-      
-      // Generate a random game ID
       gameId = Math.random().toString(36).substring(2, 10).toUpperCase();
-      
-      // Display the game ID
       const gameIdDisplay = document.getElementById('gameIdDisplay');
       gameIdDisplay.textContent = gameId;
       gameIdDisplay.style.display = 'block';
       document.getElementById('copyButton').style.display = 'inline-block';
       document.getElementById('waitingMessage').style.display = 'block';
-      document.getElementById('generateGameBtn').style.display = 'none';
+      
+      // Show lobby UI with game ID info
+      document.getElementById('lobby').style.display = 'block';
+      document.getElementById('lobbyMessage').textContent = "Waiting for opponent to join with ID: " + gameId;
+      document.getElementById('lobbyStartBtn').style.display = 'none';
       
       // Initialize PeerJS with the game ID
       initPeer(gameId);
       
-      // Initialize the game
+      // Initialize game scene (but do not start the game yet)
       initGame();
       
-      // Host starts the game automatically
-      gameStarted = true;
-      currentPlayer = 'X';
-      updateGameStatus();
+      // Hide player selector in multiplayer
       document.getElementById('playerSelector').style.display = 'none';
-      document.getElementById('gameStatus').textContent = "Waiting for opponent to join with ID: " + gameId;
       
-      console.log("Create multiplayer game initiated with ID:", gameId);
+      // Update game status text for host
+      document.getElementById('gameStatus').textContent = "Lobby open. Waiting for opponent...";
+      
+      console.log("Created multiplayer game with ID:", gameId);
     }
     
+    // Join Multiplayer Game (Joiner)
     function joinMultiplayerGame() {
       isHost = false;
       myPlayerSymbol = 'O'; // Joiner is YONI (O)
-      
-      // Get the game ID from input
       gameId = document.getElementById('gameIdInput').value.trim();
-      
       if (!gameId) {
         alert('Please enter a valid Game ID');
         return;
       }
-      
       // Initialize PeerJS and connect to host
       initPeer();
       connectToPeer(gameId);
-      
-      // Initialize the game
+      // Initialize game scene (do not start until host clicks Start)
       initGame();
-      
-      // Set up the game for the joiner
-      gameStarted = true;
-      currentPlayer = 'X'; // Game always starts with X (host)
+      gameStarted = false;
+      currentPlayer = 'X';
       updateGameStatus();
       document.getElementById('playerSelector').style.display = 'none';
-      document.getElementById('gameStatus').textContent = "Connecting to game...";
+      document.getElementById('gameStatus').textContent = "Waiting for host to start game...";
+      // Show lobby UI for joiner
+      document.getElementById('lobby').style.display = 'block';
+      document.getElementById('lobbyMessage').textContent = "Waiting for host to start game...";
+      document.getElementById('lobbyStartBtn').style.display = 'none';
       
-      // Hide multiplayer setup
-      document.getElementById('multiplayerSetup').style.display = 'none';
-      
-      console.log("Join multiplayer game initiated with ID:", gameId);
+      console.log("Join multiplayer game with ID:", gameId);
     }
     
-    // Initialize PeerJS with the fix: register connection listener immediately if host
+    // Initialize PeerJS with immediate connection listener for host
     function initPeer(id = null) {
       try {
         updateConnectionStatus('connecting', 'Initializing connection...');
-        
-        // Create a new Peer with a provided id if host
         peer = new Peer(id);
-        
-        // Register connection handler immediately if host
         if (isHost) {
           peer.on('connection', (conn) => {
             connection = conn;
             setupConnectionHandlers();
           });
         }
-        
         peer.on('open', (id) => {
           console.log('My peer ID is: ' + id);
           updateConnectionStatus('connecting', isHost ? 'Waiting for opponent...' : 'Connecting to game...');
         });
-        
         peer.on('error', (err) => {
           console.error('PeerJS error:', err);
           updateConnectionStatus('disconnected', 'Connection error: ' + err.type);
@@ -578,7 +567,7 @@
       }
     }
     
-    // Connect to peer
+    // Connect to peer (for joiner)
     function connectToPeer(peerId) {
       try {
         console.log("Connecting to peer:", peerId);
@@ -596,39 +585,29 @@
         console.error("No connection object available");
         return;
       }
-      
       connection.on('open', () => {
         console.log('Connected to peer!');
         updateConnectionStatus('connected', 'Connected to opponent');
-        
-        // Send initial message
+        // Send initial hello message
         sendGameMessage({
           type: 'hello',
           player: myPlayerSymbol
         });
-        
-        document.getElementById('multiplayerSetup').style.display = 'none';
-        document.getElementById('connectionStatus').style.display = 'block';
-        
+        // For host, once connection is open, update lobby UI to allow game start.
         if (isHost) {
-          gameStarted = true;
-          currentPlayer = 'X';
-          updateGameStatus();
-          document.getElementById('playerSelector').style.display = 'none';
+          document.getElementById('lobbyMessage').textContent = "Opponent joined. Click Start to begin.";
+          document.getElementById('lobbyStartBtn').style.display = 'inline-block';
         }
       });
-      
       connection.on('data', (data) => {
         console.log('Received data:', data);
         handleGameMessage(data);
       });
-      
       connection.on('close', () => {
         console.log('Connection closed');
         updateConnectionStatus('disconnected', 'Connection closed');
         alert('Connection to opponent lost.');
       });
-      
       connection.on('error', (err) => {
         console.error('Connection error:', err);
         updateConnectionStatus('disconnected', 'Connection error');
@@ -645,36 +624,39 @@
       }
     }
     
-    // Handle incoming game message
+    // Handle incoming game messages
     function handleGameMessage(message) {
       console.log('Processing message:', message);
-      
       switch (message.type) {
         case 'hello':
           console.log('Opponent is player:', message.player);
           break;
-          
         case 'move':
           if (gameMode === 'multiplayer' && message.player !== myPlayerSymbol) {
             console.log('Processing opponent move:', message.row, message.col);
             placeMark(message.row, message.col, true);
           }
           break;
-          
         case 'reset':
           if (gameMode === 'multiplayer' && !isHost) {
             console.log('Resetting game from peer message');
             resetGameFromMessage();
           }
           break;
-          
         case 'score_update':
           console.log('Updating scores from peer message');
           scoreX = message.scoreX;
           scoreO = message.scoreO;
           updateScoreDisplay();
           break;
-          
+        case 'start':
+          console.log('Start game signal received.');
+          gameStarted = true;
+          currentPlayer = 'X';
+          updateGameStatus();
+          // Hide lobby UI for joiner
+          document.getElementById('lobby').style.display = 'none';
+          break;
         default:
           console.warn('Unknown message type:', message.type);
           break;
@@ -686,17 +668,14 @@
       const statusElem = document.getElementById('connectionStatus');
       const indicator = statusElem.querySelector('.status-indicator');
       const text = document.getElementById('statusText');
-      
       statusElem.style.display = 'block';
-      
       indicator.classList.remove('status-connecting', 'status-connected', 'status-disconnected');
       indicator.classList.add('status-' + status);
       text.textContent = message;
-      
       console.log('Connection status:', status, message);
     }
     
-    // Load saved scores from local storage
+    // Load saved scores from local storage (for single PC mode)
     function loadSavedGame() {
       if (localStorage.getItem('tictactoeScores')) {
         const savedData = JSON.parse(localStorage.getItem('tictactoeScores'));
@@ -717,7 +696,6 @@
         consecutiveCorrect: consecutiveCorrect
       };
       localStorage.setItem('tictactoeScores', JSON.stringify(gameData));
-      
       if (gameMode === 'multiplayer' && connection && connection.open) {
         sendGameMessage({
           type: 'score_update',
@@ -730,7 +708,6 @@
     // Initialize the scene
     function initGame() {
       console.log("Initializing game in mode:", gameMode);
-      
       if (gameMode === 'singlePc') {
         loadSavedGame();
       } else {
@@ -739,18 +716,15 @@
       
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0xf0f0f0);
-      
       camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
       camera.position.set(0, 8, 8);
       camera.lookAt(0, 0, 0);
-      
       renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       document.body.appendChild(renderer.domElement);
       
       const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
       scene.add(ambientLight);
-      
       const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
       directionalLight.position.set(1, 1, 1);
       scene.add(directionalLight);
@@ -772,35 +746,41 @@
         document.getElementById('startGameBtn').addEventListener('click', startGame);
         document.getElementById('playerSelector').style.display = 'block';
       } else {
-        if (isHost) {
-          document.getElementById('gameStatus').textContent = "You start as TATI (X)";
-        } else {
-          document.getElementById('gameStatus').textContent = "Waiting for TATI to start";
-        }
+        // In multiplayer mode, lobby UI is used instead of playerSelector
         document.getElementById('playerSelector').style.display = 'none';
       }
       
       animate();
     }
     
-    // Start the game
+    // Start game function for single PC mode (used only in that mode)
     function startGame() {
       if (gameStarted) return;
-      
       gameStarted = true;
-      
       const selectedPlayer = document.querySelector('input[name="startPlayer"]:checked').value;
       currentPlayer = selectedPlayer;
-      
       document.getElementById('playerSelector').style.display = 'none';
-      
       updateGameStatus();
     }
     
-    // Create the grid
+    // Start Multiplayer Game (Host clicking Start in lobby)
+    function startMultiplayerGame() {
+      // Host triggers game start only after opponent has joined
+      gameStarted = true;
+      currentPlayer = 'X'; // Host (TATI) always starts as X
+      updateGameStatus();
+      // Hide lobby UI
+      document.getElementById('lobby').style.display = 'none';
+      // Send start signal to joiner
+      sendGameMessage({ type: 'start' });
+    }
+    
+    // Add event listener for lobby Start button (only for host)
+    document.getElementById('lobbyStartBtn').addEventListener('click', startMultiplayerGame);
+    
+    // Create the grid (with improved clickable area for single PC)
     function createGrid() {
       board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
-      
       for (let i = 0; i < BOARD_SIZE; i++) {
         for (let j = 0; j < BOARD_SIZE; j++) {
           const cellGeometry = new THREE.BoxGeometry(CELL_SIZE, 0.1, CELL_SIZE);
@@ -810,14 +790,25 @@
             opacity: 0.8
           });
           const cell = new THREE.Mesh(cellGeometry, cellMaterial);
-          
           const x = i * (CELL_SIZE + SPACING) - OFFSET;
           const z = j * (CELL_SIZE + SPACING) - OFFSET;
           cell.position.set(x, 0, z);
-          
-          cell.userData = { row: i, col: j, type: 'cell' };
-          
+          cell.raycast = function() {}; // disable raycasting on visible cell
           scene.add(cell);
+          
+          // Add an invisible, larger plane for better click detection
+          const clickGeometry = new THREE.PlaneGeometry(CELL_SIZE + 0.3, CELL_SIZE + 0.3);
+          const clickMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0x000000,
+            transparent: true,
+            opacity: 0.0,
+            side: THREE.DoubleSide
+          });
+          const clickMesh = new THREE.Mesh(clickGeometry, clickMaterial);
+          clickMesh.rotation.x = -Math.PI / 2;
+          clickMesh.position.set(x, 0.05, z);
+          clickMesh.userData = { row: i, col: j, type: 'cell' };
+          scene.add(clickMesh);
         }
       }
     }
@@ -825,7 +816,6 @@
     // Update game status display
     function updateGameStatus() {
       const playerName = currentPlayer === 'X' ? PLAYER_X : PLAYER_O;
-      
       if (gameMode === 'multiplayer') {
         if (currentPlayer === myPlayerSymbol) {
           document.getElementById('gameStatus').textContent = `Your turn (${currentPlayer})`;
@@ -846,14 +836,12 @@
     // Trigger confetti effect
     function triggerConfetti(winner) {
       const colors = winner === 'X' ? ['#ff0000', '#ff3333', '#ff6666'] : ['#0000ff', '#3333ff', '#6666ff'];
-      
       confetti({
         particleCount: 150,
         spread: 100,
         origin: { y: 0.6 },
         colors: colors
       });
-      
       setTimeout(() => {
         confetti({
           particleCount: 80,
@@ -863,7 +851,6 @@
           colors: colors
         });
       }, 200);
-      
       setTimeout(() => {
         confetti({
           particleCount: 80,
@@ -882,11 +869,8 @@
           return;
         }
       }
-      
       if (!gameStarted || gameOver || board[row][col] !== null) return;
-      
       board[row][col] = currentPlayer;
-      
       if (gameMode === 'multiplayer' && !fromOpponent) {
         sendGameMessage({
           type: 'move',
@@ -895,7 +879,6 @@
           col: col
         });
       }
-      
       let markGeometry, markMaterial;
       if (currentPlayer === 'X') {
         const group = new THREE.Group();
@@ -914,7 +897,6 @@
         markGeometry = new THREE.TorusGeometry(0.3, 0.1, 16, 32);
         markMaterial = new THREE.MeshStandardMaterial({ color: 0x0000ff });
       }
-      
       let mark;
       if (currentPlayer === 'X') {
         mark = markGeometry;
@@ -922,18 +904,14 @@
         mark = new THREE.Mesh(markGeometry, markMaterial);
         mark.rotation.x = Math.PI / 2;
       }
-      
       const x = row * (CELL_SIZE + SPACING) - OFFSET;
       const z = col * (CELL_SIZE + SPACING) - OFFSET;
       mark.position.set(x, 0.2, z);
-      
       mark.userData = { type: 'mark', player: currentPlayer, row, col };
       scene.add(mark);
-      
       if (checkWinner(row, col)) {
         gameOver = true;
         const winner = currentPlayer === 'X' ? PLAYER_X : PLAYER_O;
-        
         if (gameMode === 'multiplayer') {
           if (currentPlayer === myPlayerSymbol) {
             document.getElementById('gameStatus').textContent = `You win!`;
@@ -943,9 +921,7 @@
         } else {
           document.getElementById('gameStatus').textContent = `${winner} wins!`;
         }
-        
         triggerConfetti(currentPlayer);
-        
         if (currentPlayer === 'X') {
           scoreX += 10;
           scoreO = Math.max(0, scoreO - 5);
@@ -955,12 +931,10 @@
           scoreO += 10;
           updateScoreDisplay();
           saveGame();
-          
           if (gameMode === 'singlePc') {
             setTimeout(showMathQuestion, 1500);
           }
         }
-        
         highlightWinningCells();
       } else if (isBoardFull()) {
         gameOver = true;
@@ -979,7 +953,6 @@
     function generateBasicMathQuestion() {
       const operations = ['+', '-', '*'];
       let num1, num2, operation, answer;
-      
       if (mathDifficulty === 1) {
         operation = operations[Math.floor(Math.random() * 2)];
         num1 = Math.floor(Math.random() * 20) + 1;
@@ -1003,13 +976,11 @@
           num2 = operation === '-' ? Math.floor(Math.random() * num1) + 1 : Math.floor(Math.random() * 100) + 1;
         }
       }
-      
       switch (operation) {
         case '+': answer = num1 + num2; break;
         case '-': answer = num1 - num2; break;
         case '*': answer = num1 * num2; break;
       }
-      
       return {
         question: `${num1} ${operation} ${num2} = ?`,
         answer: answer,
@@ -1023,11 +994,9 @@
         'apples', 'cookies', 'books', 'toys', 'stickers',
         'cards', 'pencils', 'marbles', 'stamps', 'balloons'
       ];
-      
       const itemType = problemTypes[Math.floor(Math.random() * problemTypes.length)];
       let num1, num2, answer, question;
       const operation = Math.floor(Math.random() * 3);
-      
       switch(operation) {
         case 0:
           num1 = Math.floor(Math.random() * (mathDifficulty * 20)) + 1;
@@ -1035,14 +1004,12 @@
           question = `YONI has ${num1} ${itemType}. TATI gives her ${num2} more ${itemType}. How many ${itemType} does YONI have now?`;
           answer = num1 + num2;
           break;
-          
         case 1:
           num1 = Math.floor(Math.random() * (mathDifficulty * 30)) + (mathDifficulty * 10);
           num2 = Math.floor(Math.random() * num1) + 1;
           question = `YONI has ${num1} ${itemType}. She gives ${num2} ${itemType} to TATI. How many ${itemType} does YONI have left?`;
           answer = num1 - num2;
           break;
-          
         case 2:
           if (mathDifficulty === 1) {
             num1 = Math.floor(Math.random() * 5) + 1;
@@ -1058,7 +1025,6 @@
           answer = num1 * num2;
           break;
       }
-      
       return {
         question,
         answer,
@@ -1070,9 +1036,7 @@
     function generateMissingNumberProblem() {
       const operations = ['+', '-', '*'];
       let num1, num2, answer, missingPosition, question;
-      
       const operation = operations[Math.floor(Math.random() * (mathDifficulty < 3 ? 2 : 3))];
-      
       if (operation === '*') {
         num1 = Math.floor(Math.random() * (mathDifficulty * 4)) + 1;
         num2 = Math.floor(Math.random() * (mathDifficulty * 4)) + 1;
@@ -1080,15 +1044,12 @@
         num1 = Math.floor(Math.random() * (mathDifficulty * 30)) + 1;
         num2 = operation === '-' ? Math.floor(Math.random() * num1) + 1 : Math.floor(Math.random() * (mathDifficulty * 30)) + 1;
       }
-      
       switch (operation) {
         case '+': answer = num1 + num2; break;
         case '-': answer = num1 - num2; break;
         case '*': answer = num1 * num2; break;
       }
-      
       missingPosition = Math.floor(Math.random() * 3);
-      
       if (missingPosition === 0) {
         question = `? ${operation} ${num2} = ${answer}`;
         answer = num1;
@@ -1098,7 +1059,6 @@
       } else {
         question = `${num1} ${operation} ${num2} = ?`;
       }
-      
       return {
         question,
         answer,
@@ -1109,14 +1069,11 @@
     // Generate a multi-step problem (harder)
     function generateMultiStepProblem() {
       let num1, num2, num3, answer, question;
-      
       if (mathDifficulty === 3) {
         num1 = Math.floor(Math.random() * 20) + 1;
         num2 = Math.floor(Math.random() * 20) + 1;
         num3 = Math.floor(Math.random() * 10) + 1;
-        
         const problemType = Math.floor(Math.random() * 3);
-        
         switch(problemType) {
           case 0:
             question = `${num1} + ${num2} × ${num3} = ?`;
@@ -1140,9 +1097,7 @@
         num1 = Math.floor(Math.random() * 10) + 1;
         num2 = Math.floor(Math.random() * 10) + 1;
         num3 = Math.floor(Math.random() * 10) + 1;
-        
         const problemType = Math.floor(Math.random() * 2);
-        
         switch(problemType) {
           case 0:
             question = `${num1} + ${num2} + ${num3} = ?`;
@@ -1159,7 +1114,6 @@
             break;
         }
       }
-      
       return {
         question,
         answer,
@@ -1170,7 +1124,6 @@
     // Generate a math question based on current difficulty
     function generateMathQuestion() {
       let questionType;
-      
       if (mathDifficulty === 1) {
         questionType = Math.random() < 0.7 ? 'basic' : 'word';
       } else if (mathDifficulty === 2) {
@@ -1186,7 +1139,6 @@
         else if (rand < 0.75) questionType = 'missing';
         else questionType = 'multi';
       }
-      
       switch (questionType) {
         case 'basic': return generateBasicMathQuestion();
         case 'word': return generateWordProblem();
@@ -1201,7 +1153,6 @@
       const mathProblem = generateMathQuestion();
       document.getElementById('mathQuestion').textContent = mathProblem.question;
       currentAnswer = mathProblem.answer;
-      
       document.getElementById('answerInput').value = '';
       document.getElementById('mathModal').style.display = 'flex';
     }
@@ -1209,13 +1160,10 @@
     // Check math answer
     function checkMathAnswer() {
       const userAnswer = parseInt(document.getElementById('answerInput').value);
-      
       if (userAnswer === currentAnswer) {
         scoreO += 10;
         updateScoreDisplay();
-        
         consecutiveCorrect++;
-        
         if (consecutiveCorrect >= 3 && mathDifficulty < 3) {
           mathDifficulty++;
           consecutiveCorrect = 0;
@@ -1223,18 +1171,15 @@
         } else {
           alert("Correct! Your points have been doubled!");
         }
-        
         saveGame();
       } else {
         consecutiveCorrect = 0;
         alert("Sorry, that's incorrect. The correct answer is " + currentAnswer);
-        
         if (mathDifficulty > 1 && Math.random() < 0.3) {
           mathDifficulty--;
           saveGame();
         }
       }
-      
       document.getElementById('mathModal').style.display = 'none';
     }
     
@@ -1251,10 +1196,8 @@
         [1, 1],
         [1, -1]
       ];
-      
       for (const [dx, dy] of directions) {
         let count = 1;
-        
         for (let i = 1; i < WINNING_LENGTH; i++) {
           const newRow = row + dx * i;
           const newCol = col + dy * i;
@@ -1264,7 +1207,6 @@
             break;
           }
         }
-        
         for (let i = 1; i < WINNING_LENGTH; i++) {
           const newRow = row - dx * i;
           const newCol = col - dy * i;
@@ -1274,12 +1216,10 @@
             break;
           }
         }
-        
         if (count >= WINNING_LENGTH) {
           return true;
         }
       }
-      
       return false;
     }
     
@@ -1314,12 +1254,10 @@
             }
           }
         });
-        
         if (gameOver) {
           requestAnimationFrame(winningAnimation);
         }
       };
-      
       winningAnimation();
     }
     
@@ -1332,23 +1270,16 @@
             objectsToRemove.push(object);
           }
         });
-        
         for (const object of objectsToRemove) {
           scene.remove(object);
         }
-        
         board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
         gameOver = false;
-        
         if (gameMode === 'multiplayer') {
           if (isHost) {
             gameStarted = true;
             currentPlayer = 'X';
-            
-            sendGameMessage({
-              type: 'reset'
-            });
-            
+            sendGameMessage({ type: 'reset' });
             updateGameStatus();
           } else {
             document.getElementById('gameStatus').textContent = "Waiting for host to reset...";
@@ -1358,7 +1289,6 @@
           document.getElementById('playerSelector').style.display = 'block';
           document.getElementById('gameStatus').textContent = "Select who starts";
         }
-        
         renderer.render(scene, camera);
       } catch (error) {
         console.error("Error resetting game:", error);
@@ -1370,31 +1300,24 @@
       gameStarted = true;
       currentPlayer = 'X';
       gameOver = false;
-      
       updateGameStatus();
     }
     
     // Handle mouse click
     function onMouseDown(event) {
       if (!gameStarted || gameOver) return;
-      
       if (gameMode === 'multiplayer' && currentPlayer !== myPlayerSymbol) {
         return;
       }
-      
       const mouse = new THREE.Vector2();
       mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
       mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-      
       const raycaster = new THREE.Raycaster();
       raycaster.setFromCamera(mouse, camera);
-      
       const intersects = raycaster.intersectObjects(scene.children);
-      
       for (let i = 0; i < intersects.length; i++) {
         const intersect = intersects[i];
         const object = intersect.object;
-        
         if (object.userData && object.userData.type === 'cell') {
           const { row, col } = object.userData;
           placeMark(row, col);
@@ -1413,11 +1336,9 @@
     // Animation loop
     function animate() {
       requestAnimationFrame(animate);
-      
       camera.position.x = 8 * Math.sin(Date.now() * 0.0001);
       camera.position.z = 8 * Math.cos(Date.now() * 0.0001);
       camera.lookAt(0, 0, 0);
-      
       renderer.render(scene, camera);
     }
     
