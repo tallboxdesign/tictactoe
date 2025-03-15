@@ -292,6 +292,52 @@
       z-index: 1100;
       text-align: center;
     }
+    
+    /* Responsive styles */
+    @media screen and (max-width: 768px) {
+      .mode-card {
+        width: 250px;
+        padding: 15px;
+      }
+      
+      .setup-card {
+        width: 90%;
+        max-width: 350px;
+      }
+      
+      #info {
+        font-size: 16px;
+      }
+      
+      #gameStatus {
+        font-size: 20px;
+      }
+      
+      #scoreBoard {
+        font-size: 14px;
+      }
+      
+      .btn {
+        padding: 8px 16px;
+        font-size: 14px;
+      }
+    }
+    
+    @media screen and (max-width: 480px) {
+      .player-option {
+        display: block;
+        margin: 10px 0;
+      }
+      
+      .tabs {
+        flex-direction: column;
+      }
+      
+      .tab {
+        margin: 2px 0;
+        border-radius: 5px;
+      }
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
 </head>
@@ -399,7 +445,7 @@
     let gameStarted = false;
     let gameMode = 'singlePc'; // 'singlePc' or 'multiplayer'
     const BOARD_SIZE = 5;
-    const CELL_SIZE = 1;
+    const CELL_SIZE = 1.25; // Increased by 25% from 1.0
     const WINNING_LENGTH = 4;
     const SPACING = 0.1;
     const TOTAL_SIZE = BOARD_SIZE * (CELL_SIZE + SPACING) - SPACING;
@@ -426,11 +472,11 @@
     
     // Camera settings for stable rendering
     let cameraAngle = 0;
-    let cameraTargetAngle = 0;
-    let cameraHeight = 8;
-    let cameraDistance = 8;
-    let cameraRotationSpeed = 0.002; // Slower camera rotation
+    let cameraHeight = 10; // Increased from 8 to accommodate larger board
+    let cameraDistance = 12; // Increased from 8 to accommodate larger board
+    let cameraRotationSpeed = 0.001; // Reduced from 0.002 for smoother rotation
     let isCameraAutoRotating = true;
+    let lastFrameTime = 0;
     
     // Mode Selection
     document.getElementById('singlePcMode').addEventListener('click', () => {
@@ -446,7 +492,7 @@
       setupMultiplayerTabs();
     });
     
-    // Reset button event listener (Added here instead of inline onClick)
+    // Reset button event listener
     document.getElementById('resetButton').addEventListener('click', resetGame);
     
     // Multiplayer Setup Tabs
@@ -782,9 +828,9 @@
       setupScene();
       
       // Add event listeners for user interactions
-      window.addEventListener('resize', onWindowResize);
-      document.addEventListener('mousedown', onMouseDown);
-      document.addEventListener('keydown', onKeyDown);
+      window.addEventListener('resize', onWindowResize, false);
+      document.addEventListener('mousedown', onMouseDown, false);
+      document.addEventListener('keydown', onKeyDown, false);
       document.getElementById('submitAnswer').addEventListener('click', checkMathAnswer);
       document.getElementById('skipQuestion').addEventListener('click', skipMathQuestion);
       
@@ -801,27 +847,42 @@
     
     // Setup the 3D scene
     function setupScene() {
+      // Clean up any existing scene
+      if (renderer && renderer.domElement && renderer.domElement.parentNode) {
+        renderer.domElement.parentNode.removeChild(renderer.domElement);
+      }
+      
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0xf0f0f0);
       
-      // Camera setup with better initialization
-      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      // Camera setup with better initialization for larger board
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
       camera.position.set(0, cameraHeight, cameraDistance);
       camera.lookAt(0, 0, 0);
       
       // Renderer with antialiasing for smoother graphics
-      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       document.body.appendChild(renderer.domElement);
       
-      // Improved lighting
+      // Improved lighting for better visual quality
       const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
       scene.add(ambientLight);
       
       const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
       directionalLight.position.set(5, 10, 5);
       directionalLight.castShadow = true;
+      
+      // Improve shadow quality
+      directionalLight.shadow.mapSize.width = 1024;
+      directionalLight.shadow.mapSize.height = 1024;
+      directionalLight.shadow.camera.near = 0.5;
+      directionalLight.shadow.camera.far = 50;
+      directionalLight.shadow.bias = -0.001;
+      
       scene.add(directionalLight);
       
       // Add a subtle fill light from the opposite side
@@ -829,7 +890,7 @@
       fillLight.position.set(-5, 5, -5);
       scene.add(fillLight);
       
-      // Board base
+      // Board base with improved materials
       const baseGeometry = new THREE.BoxGeometry(TOTAL_SIZE + 0.5, 0.2, TOTAL_SIZE + 0.5);
       const baseMaterial = new THREE.MeshStandardMaterial({ 
         color: 0x555555,
@@ -838,6 +899,7 @@
       });
       const base = new THREE.Mesh(baseGeometry, baseMaterial);
       base.position.y = -0.15;
+      base.receiveShadow = true;
       scene.add(base);
       
       createGrid();
@@ -877,7 +939,7 @@
       const gridGroup = new THREE.Group();
       scene.add(gridGroup);
       
-      // Create the grid cells
+      // Create the grid cells with improved rendering
       for (let i = 0; i < BOARD_SIZE; i++) {
         for (let j = 0; j < BOARD_SIZE; j++) {
           // Create a visible cell with better materials
@@ -894,6 +956,7 @@
           const x = i * (CELL_SIZE + SPACING) - OFFSET;
           const z = j * (CELL_SIZE + SPACING) - OFFSET;
           cell.position.set(x, 0, z);
+          cell.receiveShadow = true;
           
           // Add a subtle shadow and border effect
           const borderGeometry = new THREE.BoxGeometry(CELL_SIZE + 0.05, 0.05, CELL_SIZE + 0.05);
@@ -904,14 +967,27 @@
           });
           const border = new THREE.Mesh(borderGeometry, borderMaterial);
           border.position.y = -0.08;
+          border.receiveShadow = true;
           cell.add(border);
           
-          // Disable raycasting on visible cell for performance
-          cell.raycast = function() {};
+          // Add cell highlight effect for better visual feedback
+          const highlightGeometry = new THREE.PlaneGeometry(CELL_SIZE, CELL_SIZE);
+          const highlightMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffff00,
+            transparent: true,
+            opacity: 0.0,
+            side: THREE.DoubleSide
+          });
+          const highlight = new THREE.Mesh(highlightGeometry, highlightMaterial);
+          highlight.rotation.x = -Math.PI / 2;
+          highlight.position.y = 0.055;
+          highlight.userData = { type: 'highlight', row: i, col: j };
+          cell.add(highlight);
+          
           gridGroup.add(cell);
           
           // Add an invisible, larger plane for better click detection
-          const clickGeometry = new THREE.PlaneGeometry(CELL_SIZE + 0.3, CELL_SIZE + 0.3);
+          const clickGeometry = new THREE.PlaneGeometry(CELL_SIZE, CELL_SIZE);
           const clickMaterial = new THREE.MeshBasicMaterial({ 
             color: 0x000000,
             transparent: true,
@@ -981,11 +1057,17 @@
       scene.traverse((object) => {
         if (object.userData && object.userData.type === 'mark' && object.userData.player === loser) {
           object.userData.falling = true;
+          object.userData.fallSpeed = 0.02 + Math.random() * 0.03; // Randomized fall speed
+          object.userData.rotationSpeed = {
+            x: (Math.random() - 0.5) * 0.1,
+            y: (Math.random() - 0.5) * 0.1,
+            z: (Math.random() - 0.5) * 0.1
+          };
         }
       });
     }
     
-    // Place a mark on the board
+    // Place a mark on the board with improved visual effects
     function placeMark(row, col, fromOpponent = false) {
       if (gameMode === 'multiplayer') {
         if (!fromOpponent && currentPlayer !== myPlayerSymbol) {
@@ -1002,44 +1084,83 @@
           col: col
         });
       }
-      let markGeometry, markMaterial;
+      
+      // Create mark with improved visuals
+      let markObject;
+      const x = row * (CELL_SIZE + SPACING) - OFFSET;
+      const z = col * (CELL_SIZE + SPACING) - OFFSET;
+      
       if (currentPlayer === 'X') {
+        // Create a more visually appealing X mark
         const group = new THREE.Group();
-        const xBar1 = new THREE.BoxGeometry(0.1, 0.2, 0.8);
-        const xBar2 = new THREE.BoxGeometry(0.1, 0.2, 0.8);
+        
+        // Thicker bars for X
+        const xBar1Geometry = new THREE.BoxGeometry(0.15, 0.2, CELL_SIZE * 0.7);
+        const xBar2Geometry = new THREE.BoxGeometry(0.15, 0.2, CELL_SIZE * 0.7);
+        
         const xMaterial = new THREE.MeshStandardMaterial({ 
           color: 0xff0000,
           roughness: 0.3,
-          metalness: 0.5
+          metalness: 0.5,
+          emissive: 0x330000
         });
-        const xMesh1 = new THREE.Mesh(xBar1, xMaterial);
-        const xMesh2 = new THREE.Mesh(xBar2, xMaterial);
+        
+        const xMesh1 = new THREE.Mesh(xBar1Geometry, xMaterial);
+        const xMesh2 = new THREE.Mesh(xBar2Geometry, xMaterial);
+        
         xMesh1.rotation.y = Math.PI / 4;
         xMesh2.rotation.y = -Math.PI / 4;
+        
+        xMesh1.castShadow = true;
+        xMesh2.castShadow = true;
+        
         group.add(xMesh1);
         group.add(xMesh2);
-        markGeometry = group;
-        markMaterial = null;
+        
+        // Add a small animation for placement
+        group.scale.set(0.01, 0.01, 0.01);
+        group.userData = { 
+          type: 'mark', 
+          player: currentPlayer, 
+          row, 
+          col,
+          animating: true,
+          animationProgress: 0
+        };
+        
+        markObject = group;
       } else {
-        markGeometry = new THREE.TorusGeometry(0.3, 0.1, 20, 36); // More detail in the torus
-        markMaterial = new THREE.MeshStandardMaterial({ 
+        // Create a more visually appealing O mark
+        const torusGeometry = new THREE.TorusGeometry(CELL_SIZE * 0.3, CELL_SIZE * 0.08, 20, 36);
+        const torusMaterial = new THREE.MeshStandardMaterial({ 
           color: 0x0000ff,
           roughness: 0.3,
-          metalness: 0.5
+          metalness: 0.5,
+          emissive: 0x000033
         });
+        
+        const torus = new THREE.Mesh(torusGeometry, torusMaterial);
+        torus.rotation.x = Math.PI / 2;
+        torus.castShadow = true;
+        
+        // Add a small animation for placement
+        torus.scale.set(0.01, 0.01, 0.01);
+        torus.userData = { 
+          type: 'mark', 
+          player: currentPlayer, 
+          row, 
+          col,
+          animating: true,
+          animationProgress: 0
+        };
+        
+        markObject = torus;
       }
-      let mark;
-      if (currentPlayer === 'X') {
-        mark = markGeometry;
-      } else {
-        mark = new THREE.Mesh(markGeometry, markMaterial);
-        mark.rotation.x = Math.PI / 2;
-      }
-      const x = row * (CELL_SIZE + SPACING) - OFFSET;
-      const z = col * (CELL_SIZE + SPACING) - OFFSET;
-      mark.position.set(x, 0.2, z);
-      mark.userData = { type: 'mark', player: currentPlayer, row, col };
-      scene.add(mark);
+      
+      markObject.position.set(x, 0.2, z);
+      scene.add(markObject);
+      
+      // Check for winner after placing mark
       if (checkWinner(row, col)) {
         gameOver = true;
         const winner = currentPlayer === 'X' ? PLAYER_X : PLAYER_O;
@@ -1380,15 +1501,35 @@
     
     // Highlight winning cells
     function highlightWinningCells() {
+      // More advanced winning animation with color changes and pulsing
       const winningAnimation = () => {
+        const time = Date.now() * 0.001;
         scene.traverse((object) => {
           if (object.userData && object.userData.type === 'mark' && object.userData.player === currentPlayer) {
             if (object.userData.player === 'X') {
+              // Rotating X pieces
               object.rotation.y += 0.02;
-              object.position.y = 0.2 + Math.sin(Date.now() * 0.005) * 0.1;
+              object.position.y = 0.2 + Math.sin(time * 3) * 0.1;
+              
+              // Color pulsing for X pieces
+              if (object.children && object.children.length > 0) {
+                object.children.forEach(child => {
+                  if (child.material) {
+                    const intensity = 0.5 + Math.sin(time * 5) * 0.3;
+                    child.material.emissive.setRGB(intensity, 0, 0);
+                  }
+                });
+              }
             } else {
+              // Rotating O pieces
               object.rotation.z += 0.02;
-              object.position.y = 0.2 + Math.sin(Date.now() * 0.005) * 0.1;
+              object.position.y = 0.2 + Math.sin(time * 3) * 0.1;
+              
+              // Color pulsing for O pieces
+              if (object.material) {
+                const intensity = 0.5 + Math.sin(time * 5) * 0.3;
+                object.material.emissive.setRGB(0, 0, intensity);
+              }
             }
           }
         });
@@ -1471,21 +1612,26 @@
       }
     }
     
-    // Handle mouse click
+    // Handle mouse click with improved hover effects
     function onMouseDown(event) {
       if (!gameStarted || gameOver) return;
       if (gameMode === 'multiplayer' && currentPlayer !== myPlayerSymbol) {
         return;
       }
+      
       const mouse = new THREE.Vector2();
       mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
       mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      
       const raycaster = new THREE.Raycaster();
       raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(scene.children);
+      
+      const intersects = raycaster.intersectObjects(scene.children, true);
+      
       for (let i = 0; i < intersects.length; i++) {
         const intersect = intersects[i];
         const object = intersect.object;
+        
         if (object.userData && object.userData.type === 'cell') {
           const { row, col } = object.userData;
           placeMark(row, col);
@@ -1494,42 +1640,129 @@
       }
     }
     
-    // Handle window resize
+    // Improved mouse hover effect
+    function onMouseMove(event) {
+      if (!gameStarted || gameOver) return;
+      if (gameMode === 'multiplayer' && currentPlayer !== myPlayerSymbol) {
+        return;
+      }
+      
+      const mouse = new THREE.Vector2();
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(mouse, camera);
+      
+      const intersects = raycaster.intersectObjects(scene.children, true);
+      let hoveredCell = null;
+      
+      for (let i = 0; i < intersects.length; i++) {
+        const object = intersects[i].object;
+        if (object.userData && object.userData.type === 'cell') {
+          hoveredCell = object.userData;
+          break;
+        }
+      }
+      
+      // Update all cell highlights
+      scene.traverse((object) => {
+        if (object.userData && object.userData.type === 'highlight') {
+          if (hoveredCell && object.userData.row === hoveredCell.row && object.userData.col === hoveredCell.col) {
+            if (board[hoveredCell.row][hoveredCell.col] === null) {
+              object.material.opacity = 0.3;
+            }
+          } else {
+            object.material.opacity = 0;
+          }
+        }
+      });
+    }
+    
+    // Add mouse move event listener for hover effects
+    document.addEventListener('mousemove', onMouseMove, false);
+    
+    // Handle window resize with improved responsive handling
     function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
+      
+      // Adjust camera for different screen sizes
+      if (window.innerWidth < 768) {
+        // For mobile devices, increase camera distance to see the whole board
+        cameraDistance = 14;
+        cameraHeight = 12;
+      } else {
+        // For larger screens
+        cameraDistance = 12;
+        cameraHeight = 10;
+      }
     }
     
-    // Animation loop with smooth camera movement
+    // Animation loop with smooth camera movement and delta time
     function animate() {
       requestAnimationFrame(animate);
       
+      const currentTime = Date.now();
+      const deltaTime = (currentTime - lastFrameTime) / 1000; // time in seconds
+      lastFrameTime = currentTime;
+      
+      // Limit delta time to avoid big jumps after tab switching
+      const limitedDelta = Math.min(deltaTime, 0.1);
+      
       // Smoother camera movement
       if (isCameraAutoRotating) {
-        // Increase angle by a tiny amount each frame for smooth rotation
-        cameraAngle += cameraRotationSpeed;
+        // Use time-based rotation for consistent speed
+        cameraAngle += cameraRotationSpeed * limitedDelta * 30;
       }
       
-      // Smoothly interpolate camera position
+      // Smoothly interpolate camera position for stable rotation
       const targetX = cameraDistance * Math.sin(cameraAngle);
       const targetZ = cameraDistance * Math.cos(cameraAngle);
       
-      // Smoothly interpolate between current and target position
-      camera.position.x += (targetX - camera.position.x) * 0.05;
-      camera.position.z += (targetZ - camera.position.z) * 0.05;
+      // Smoother interpolation with weighted blending
+      camera.position.x += (targetX - camera.position.x) * 0.03;
+      camera.position.z += (targetZ - camera.position.z) * 0.03;
       
       // Always look at the center
       camera.lookAt(0, 0, 0);
       
+      // Animate piece placement
+      scene.traverse((object) => {
+        if (object.userData && object.userData.animating) {
+          object.userData.animationProgress += 0.1;
+          const progress = Math.min(object.userData.animationProgress, 1);
+          
+          // Ease-out function for smoother animation
+          const scale = 1 - Math.pow(1 - progress, 3);
+          object.scale.set(scale, scale, scale);
+          
+          if (progress >= 1) {
+            object.userData.animating = false;
+          }
+        }
+      });
+      
       // Animate falling marks (loser's pieces)
       scene.traverse((object) => {
         if (object.userData && object.userData.falling) {
-          // Lower the piece gradually
-          object.position.y -= 0.05; // adjust speed as needed
-          // Add spinning effect
-          object.rotation.x += 0.05;
-          object.rotation.y += 0.05;
+          // Use the individual fall speed and rotation speed
+          object.position.y -= object.userData.fallSpeed || 0.05;
+          
+          if (object.userData.rotationSpeed) {
+            object.rotation.x += object.userData.rotationSpeed.x;
+            object.rotation.y += object.userData.rotationSpeed.y;
+            object.rotation.z += object.userData.rotationSpeed.z;
+          } else {
+            object.rotation.x += 0.05;
+            object.rotation.y += 0.05;
+          }
+          
+          // Remove from scene if below the floor
+          if (object.position.y < -5) {
+            scene.remove(object);
+          }
         }
       });
       
@@ -1539,6 +1772,7 @@
     // Initialize when window loads
     window.addEventListener('load', () => {
       console.log("Window loaded - game initialization complete");
+      lastFrameTime = Date.now();
     });
   </script>
 </body>
