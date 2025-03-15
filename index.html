@@ -319,6 +319,10 @@
                 <p>You will play as: <span id="joinerRole">YONI (O)</span></p>
                 <button class="btn" id="joinGameBtn">Join Game</button>
             </div>
+            
+            <div style="margin-top: 20px; text-align: center;">
+                <button class="btn" id="cancelSetupBtn" style="background-color: #f44336;">Cancel</button>
+            </div>
         </div>
     </div>
     
@@ -449,40 +453,101 @@
                     console.error('Could not copy text: ', err);
                 });
             });
+            
+            // Cancel Button - Return to mode selection
+            document.getElementById('cancelSetupBtn').addEventListener('click', () => {
+                // Reset multiplayer setup state
+                document.getElementById('gameIdDisplay').style.display = 'none';
+                document.getElementById('copyButton').style.display = 'none';
+                document.getElementById('waitingMessage').style.display = 'none';
+                document.getElementById('generateGameBtn').style.display = 'block';
+                document.getElementById('gameIdInput').value = '';
+                
+                // Close any active peer connections
+                if (peer) {
+                    peer.destroy();
+                    peer = null;
+                }
+                if (connection) {
+                    connection.close();
+                    connection = null;
+                }
+                
+                // Reset connection status
+                document.getElementById('connectionStatus').style.display = 'none';
+                
+                // Hide multiplayer setup and show mode selector
+                document.getElementById('multiplayerSetup').style.display = 'none';
+                document.getElementById('modeSelector').style.display = 'flex';
+            });
         }
         
         // Create Multiplayer Game
         function createMultiplayerGame() {
-            isHost = true;
-            myPlayerSymbol = 'X'; // Host is TATI (X)
-            
-            // Generate a random game ID
-            gameId = Math.random().toString(36).substring(2, 10).toUpperCase();
-            
-            // Display the game ID
-            const gameIdDisplay = document.getElementById('gameIdDisplay');
-            gameIdDisplay.textContent = gameId;
-            gameIdDisplay.style.display = 'block';
-            document.getElementById('copyButton').style.display = 'inline-block';
-            document.getElementById('waitingMessage').style.display = 'block';
-            document.getElementById('generateGameBtn').style.display = 'none';
-            
-            // Initialize PeerJS
-            initPeer(gameId);
-        }
-        
-        // Join Multiplayer Game
-        function joinMultiplayerGame() {
-            isHost = false;
-            myPlayerSymbol = 'O'; // Joiner is YONI (O)
-            
-            // Get the game ID from input
-            gameId = document.getElementById('gameIdInput').value.trim();
-            
-            if (!gameId) {
-                alert('Please enter a valid Game ID');
-                return;
-            }
+    isHost = true;
+    myPlayerSymbol = 'X'; // Host is TATI (X)
+    
+    // Generate a random game ID
+    gameId = Math.random().toString(36).substring(2, 10).toUpperCase();
+    
+    // Display the game ID
+    const gameIdDisplay = document.getElementById('gameIdDisplay');
+    gameIdDisplay.textContent = gameId;
+    gameIdDisplay.style.display = 'block';
+    document.getElementById('copyButton').style.display = 'inline-block';
+    document.getElementById('waitingMessage').style.display = 'block';
+    document.getElementById('generateGameBtn').style.display = 'none';
+    
+    // Initialize PeerJS
+    initPeer(gameId);
+    
+    // Start the game immediately for the host
+    document.getElementById('multiplayerSetup').style.display = 'none';
+    document.getElementById('gameBoard').style.display = 'block';
+    document.getElementById('connectionStatus').style.display = 'block';
+    
+    // Initialize the game
+    initGame();
+    
+    // Host starts the game automatically
+    gameStarted = true;
+    currentPlayer = 'X';
+    updateGameStatus();
+    document.getElementById('playerSelector').style.display = 'none';
+    document.getElementById('gameStatus').textContent = "Waiting for opponent to join with ID: " + gameId;
+}
+
+function joinMultiplayerGame() {
+    isHost = false;
+    myPlayerSymbol = 'O'; // Joiner is YONI (O)
+    
+    // Get the game ID from input
+    gameId = document.getElementById('gameIdInput').value.trim();
+    
+    if (!gameId) {
+        alert('Please enter a valid Game ID');
+        return;
+    }
+    
+    // Initialize PeerJS and connect to host
+    initPeer();
+    connectToPeer(gameId);
+    
+    // Start the game immediately for the joiner
+    document.getElementById('multiplayerSetup').style.display = 'none';
+    document.getElementById('gameBoard').style.display = 'block';
+    document.getElementById('connectionStatus').style.display = 'block';
+    
+    // Initialize the game
+    initGame();
+    
+    // Set up the game for the joiner
+    gameStarted = true;
+    currentPlayer = 'X'; // Game always starts with X (host)
+    updateGameStatus();
+    document.getElementById('playerSelector').style.display = 'none';
+    document.getElementById('gameStatus').textContent = "Connecting to game...";
+}
             
             // Initialize PeerJS and connect to host
             initPeer();
