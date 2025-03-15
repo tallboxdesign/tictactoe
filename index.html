@@ -48,6 +48,7 @@
       border-radius: 5px;
       cursor: pointer;
       z-index: 100;
+      display: none; /* Hidden by default, shown when appropriate */
     }
     #resetButton:hover {
       background-color: #45a049;
@@ -354,7 +355,7 @@
   
   <div id="info">5x5 Tic-Tac-Toe (Connect 4) - X: TATI, O: YONI</div>
   <div id="gameStatus">Select who starts</div>
-  <button id="resetButton" onclick="resetGame()">Reset Game</button>
+  <button id="resetButton">Reset Game</button>
   
   <div id="playerSelector">
     <div class="player-option">
@@ -423,6 +424,14 @@
     let mathDifficulty = 1; // Start with easy questions
     let consecutiveCorrect = 0;
     
+    // Camera settings for stable rendering
+    let cameraAngle = 0;
+    let cameraTargetAngle = 0;
+    let cameraHeight = 8;
+    let cameraDistance = 8;
+    let cameraRotationSpeed = 0.002; // Slower camera rotation
+    let isCameraAutoRotating = true;
+    
     // Mode Selection
     document.getElementById('singlePcMode').addEventListener('click', () => {
       gameMode = 'singlePc';
@@ -436,6 +445,9 @@
       document.getElementById('multiplayerSetup').style.display = 'flex';
       setupMultiplayerTabs();
     });
+    
+    // Reset button event listener (Added here instead of inline onClick)
+    document.getElementById('resetButton').addEventListener('click', resetGame);
     
     // Multiplayer Setup Tabs
     function setupMultiplayerTabs() {
@@ -618,8 +630,14 @@
           document.getElementById('lobbyStartBtn').onclick = function() {
             startMultiplayerGame();
           };
+          
+          // Enable reset button for host
+          document.getElementById('resetButton').style.display = 'block';
         } else {
           document.getElementById('lobbyMessage').textContent = "Connected to host. Waiting for game to start...";
+          
+          // Hide reset button for non-host players
+          document.getElementById('resetButton').style.display = 'none';
         }
       });
       
@@ -691,6 +709,14 @@
           document.getElementById('lobby').style.display = 'none';
           document.getElementById('multiplayerSetup').style.display = 'none';
           break;
+        case 'stop_camera':
+          console.log('Stopping camera rotation');
+          isCameraAutoRotating = false;
+          break;
+        case 'start_camera':
+          console.log('Starting camera rotation');
+          isCameraAutoRotating = true;
+          break;
         default:
           console.warn('Unknown message type:', message.type);
           break;
@@ -744,35 +770,21 @@
       console.log("Initializing game in mode:", gameMode);
       if (gameMode === 'singlePc') {
         loadSavedGame();
+        // Show reset button for single PC mode
+        document.getElementById('resetButton').style.display = 'block';
       } else {
         document.getElementById('connectionStatus').style.display = 'block';
+        // In multiplayer mode, only show reset button for host
+        document.getElementById('resetButton').style.display = isHost ? 'block' : 'none';
       }
       
-      scene = new THREE.Scene();
-      scene.background = new THREE.Color(0xf0f0f0);
-      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-      camera.position.set(0, 8, 8);
-      camera.lookAt(0, 0, 0);
-      renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      document.body.appendChild(renderer.domElement);
+      // Setup 3D scene
+      setupScene();
       
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-      scene.add(ambientLight);
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-      directionalLight.position.set(1, 1, 1);
-      scene.add(directionalLight);
-      
-      const baseGeometry = new THREE.BoxGeometry(TOTAL_SIZE + 0.5, 0.2, TOTAL_SIZE + 0.5);
-      const baseMaterial = new THREE.MeshStandardMaterial({ color: 0x555555 });
-      const base = new THREE.Mesh(baseGeometry, baseMaterial);
-      base.position.y = -0.15;
-      scene.add(base);
-      
-      createGrid();
-      
+      // Add event listeners for user interactions
       window.addEventListener('resize', onWindowResize);
       document.addEventListener('mousedown', onMouseDown);
+      document.addEventListener('keydown', onKeyDown);
       document.getElementById('submitAnswer').addEventListener('click', checkMathAnswer);
       document.getElementById('skipQuestion').addEventListener('click', skipMathQuestion);
       
@@ -785,6 +797,50 @@
       }
       
       animate();
+    }
+    
+    // Setup the 3D scene
+    function setupScene() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xf0f0f0);
+      
+      // Camera setup with better initialization
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(0, cameraHeight, cameraDistance);
+      camera.lookAt(0, 0, 0);
+      
+      // Renderer with antialiasing for smoother graphics
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      document.body.appendChild(renderer.domElement);
+      
+      // Improved lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(ambientLight);
+      
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight.position.set(5, 10, 5);
+      directionalLight.castShadow = true;
+      scene.add(directionalLight);
+      
+      // Add a subtle fill light from the opposite side
+      const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+      fillLight.position.set(-5, 5, -5);
+      scene.add(fillLight);
+      
+      // Board base
+      const baseGeometry = new THREE.BoxGeometry(TOTAL_SIZE + 0.5, 0.2, TOTAL_SIZE + 0.5);
+      const baseMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x555555,
+        roughness: 0.7,
+        metalness: 0.1
+      });
+      const base = new THREE.Mesh(baseGeometry, baseMaterial);
+      base.position.y = -0.15;
+      scene.add(base);
+      
+      createGrid();
     }
     
     // Start game function for single PC mode (used only in that mode)
@@ -813,23 +869,46 @@
       sendGameMessage({ type: 'start' });
     }
     
-    // Create the grid (with improved clickable area for single PC)
+    // Create the grid with improved cell rendering
     function createGrid() {
       board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
+      
+      // Create a group for all grid cells for better organization
+      const gridGroup = new THREE.Group();
+      scene.add(gridGroup);
+      
+      // Create the grid cells
       for (let i = 0; i < BOARD_SIZE; i++) {
         for (let j = 0; j < BOARD_SIZE; j++) {
+          // Create a visible cell with better materials
           const cellGeometry = new THREE.BoxGeometry(CELL_SIZE, 0.1, CELL_SIZE);
           const cellMaterial = new THREE.MeshStandardMaterial({ 
             color: 0xffffff,
             transparent: true,
-            opacity: 0.8
+            opacity: 0.9,
+            roughness: 0.3,
+            metalness: 0.1
           });
+          
           const cell = new THREE.Mesh(cellGeometry, cellMaterial);
           const x = i * (CELL_SIZE + SPACING) - OFFSET;
           const z = j * (CELL_SIZE + SPACING) - OFFSET;
           cell.position.set(x, 0, z);
-          cell.raycast = function() {}; // disable raycasting on visible cell
-          scene.add(cell);
+          
+          // Add a subtle shadow and border effect
+          const borderGeometry = new THREE.BoxGeometry(CELL_SIZE + 0.05, 0.05, CELL_SIZE + 0.05);
+          const borderMaterial = new THREE.MeshStandardMaterial({
+            color: 0x888888,
+            transparent: true,
+            opacity: 0.5
+          });
+          const border = new THREE.Mesh(borderGeometry, borderMaterial);
+          border.position.y = -0.08;
+          cell.add(border);
+          
+          // Disable raycasting on visible cell for performance
+          cell.raycast = function() {};
+          gridGroup.add(cell);
           
           // Add an invisible, larger plane for better click detection
           const clickGeometry = new THREE.PlaneGeometry(CELL_SIZE + 0.3, CELL_SIZE + 0.3);
@@ -919,7 +998,11 @@
         const group = new THREE.Group();
         const xBar1 = new THREE.BoxGeometry(0.1, 0.2, 0.8);
         const xBar2 = new THREE.BoxGeometry(0.1, 0.2, 0.8);
-        const xMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+        const xMaterial = new THREE.MeshStandardMaterial({ 
+          color: 0xff0000,
+          roughness: 0.3,
+          metalness: 0.5
+        });
         const xMesh1 = new THREE.Mesh(xBar1, xMaterial);
         const xMesh2 = new THREE.Mesh(xBar2, xMaterial);
         xMesh1.rotation.y = Math.PI / 4;
@@ -929,8 +1012,12 @@
         markGeometry = group;
         markMaterial = null;
       } else {
-        markGeometry = new THREE.TorusGeometry(0.3, 0.1, 16, 32);
-        markMaterial = new THREE.MeshStandardMaterial({ color: 0x0000ff });
+        markGeometry = new THREE.TorusGeometry(0.3, 0.1, 20, 36); // More detail in the torus
+        markMaterial = new THREE.MeshStandardMaterial({ 
+          color: 0x0000ff,
+          roughness: 0.3,
+          metalness: 0.5
+        });
       }
       let mark;
       if (currentPlayer === 'X') {
@@ -1299,6 +1386,12 @@
     // Reset the game
     function resetGame() {
       try {
+        // Only allow host to reset in multiplayer mode
+        if (gameMode === 'multiplayer' && !isHost) {
+          alert("Only the host can reset the game.");
+          return;
+        }
+        
         const objectsToRemove = [];
         scene.traverse((object) => {
           if (object.userData && object.userData.type === 'mark') {
@@ -1332,10 +1425,34 @@
     
     // Reset game from message (for non-host player)
     function resetGameFromMessage() {
+      const objectsToRemove = [];
+      scene.traverse((object) => {
+        if (object.userData && object.userData.type === 'mark') {
+          objectsToRemove.push(object);
+        }
+      });
+      for (const object of objectsToRemove) {
+        scene.remove(object);
+      }
+      board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
       gameStarted = true;
       currentPlayer = 'X';
       gameOver = false;
       updateGameStatus();
+    }
+    
+    // Handle keyboard controls
+    function onKeyDown(event) {
+      // Space bar toggles camera rotation
+      if (event.code === 'Space') {
+        isCameraAutoRotating = !isCameraAutoRotating;
+        
+        if (gameMode === 'multiplayer' && connection && connection.open) {
+          sendGameMessage({
+            type: isCameraAutoRotating ? 'start_camera' : 'stop_camera'
+          });
+        }
+      }
     }
     
     // Handle mouse click
@@ -1368,15 +1485,31 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
     
-    // Animation loop
+    // Animation loop with smooth camera movement
     function animate() {
       requestAnimationFrame(animate);
-      camera.position.x = 8 * Math.sin(Date.now() * 0.0001);
-      camera.position.z = 8 * Math.cos(Date.now() * 0.0001);
+      
+      // Smoother camera movement
+      if (isCameraAutoRotating) {
+        // Increase angle by a tiny amount each frame for smooth rotation
+        cameraAngle += cameraRotationSpeed;
+      }
+      
+      // Smoothly interpolate camera position
+      const targetX = cameraDistance * Math.sin(cameraAngle);
+      const targetZ = cameraDistance * Math.cos(cameraAngle);
+      
+      // Smoothly interpolate between current and target position
+      camera.position.x += (targetX - camera.position.x) * 0.05;
+      camera.position.z += (targetZ - camera.position.z) * 0.05;
+      
+      // Always look at the center
       camera.lookAt(0, 0, 0);
+      
       renderer.render(scene, camera);
     }
     
+    // Initialize when window loads
     window.addEventListener('load', () => {
       console.log("Window loaded - game initialization complete");
     });
