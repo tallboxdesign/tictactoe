@@ -619,6 +619,14 @@
                     currentPlayer = 'X';
                     updateGameStatus();
                     document.getElementById('playerSelector').style.display = 'none';
+                    document.getElementById('gameStatus').textContent = "Game started! Your turn (X)";
+                } else {
+                    // Joiner waits for host
+                    gameStarted = true;
+                    currentPlayer = 'X'; // Game always starts with X (host)
+                    updateGameStatus();
+                    document.getElementById('playerSelector').style.display = 'none';
+                    document.getElementById('gameStatus').textContent = "Game joined! Waiting for host's move (X)";
                 }
             });
             
@@ -656,6 +664,31 @@
             switch (message.type) {
                 case 'hello':
                     console.log('Opponent is player:', message.player);
+                    // Send game state to ensure synchronization
+                    if (isHost) {
+                        sendGameMessage({
+                            type: 'game_state',
+                            board: board,
+                            currentPlayer: currentPlayer,
+                            scoreX: scoreX,
+                            scoreO: scoreO
+                        });
+                    }
+                    break;
+                    
+                case 'game_state':
+                    // Update game state from host
+                    if (!isHost) {
+                        board = message.board;
+                        currentPlayer = message.currentPlayer;
+                        scoreX = message.scoreX;
+                        scoreO = message.scoreO;
+                        updateScoreDisplay();
+                        updateGameStatus();
+                        
+                        // Redraw the board based on received state
+                        redrawBoard();
+                    }
                     break;
                     
                 case 'move':
@@ -686,6 +719,76 @@
                     console.warn('Unknown message type:', message.type);
                     break;
             }
+        }
+        
+        // Redraw the board based on current board state
+        function redrawBoard() {
+            // First clear existing marks
+            const objectsToRemove = [];
+            scene.traverse((object) => {
+                if (object.userData && object.userData.type === 'mark') {
+                    objectsToRemove.push(object);
+                }
+            });
+            
+            // Remove objects from scene
+            for (const object of objectsToRemove) {
+                scene.remove(object);
+            }
+            
+            // Redraw marks based on board state
+            for (let i = 0; i < BOARD_SIZE; i++) {
+                for (let j = 0; j < BOARD_SIZE; j++) {
+                    if (board[i][j]) {
+                        // Create mark based on board value
+                        let markGeometry, markMaterial;
+                        if (board[i][j] === 'X') {
+                            // Create X using two boxes
+                            const group = new THREE.Group();
+                            
+                            const xBar1 = new THREE.BoxGeometry(0.1, 0.2, 0.8);
+                            const xBar2 = new THREE.BoxGeometry(0.1, 0.2, 0.8);
+                            const xMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+                            
+                            const xMesh1 = new THREE.Mesh(xBar1, xMaterial);
+                            const xMesh2 = new THREE.Mesh(xBar2, xMaterial);
+                            
+                            xMesh1.rotation.y = Math.PI / 4;
+                            xMesh2.rotation.y = -Math.PI / 4;
+                            
+                            group.add(xMesh1);
+                            group.add(xMesh2);
+                            
+                            markGeometry = group;
+                            markMaterial = null;
+                        } else {
+                            // Create O using a torus
+                            markGeometry = new THREE.TorusGeometry(0.3, 0.1, 16, 32);
+                            markMaterial = new THREE.MeshStandardMaterial({ color: 0x0000ff });
+                        }
+
+                        // Create the mark mesh
+                        let mark;
+                        if (board[i][j] === 'X') {
+                            mark = markGeometry;
+                        } else {
+                            mark = new THREE.Mesh(markGeometry, markMaterial);
+                            mark.rotation.x = Math.PI / 2;
+                        }
+                        
+                        // Position the mark
+                        const x = i * (CELL_SIZE + SPACING) - OFFSET;
+                        const z = j * (CELL_SIZE + SPACING) - OFFSET;
+                        mark.position.set(x, 0.2, z);
+                        
+                        mark.userData = { type: 'mark', player: board[i][j], row: i, col: j };
+                        scene.add(mark);
+                    }
+                }
+            }
+            
+            // Force render update
+            renderer.render(scene, camera);
         }
         
         // Update connection status display
@@ -1386,120 +1489,7 @@
         function highlightWinningCells() {
             // Animation loop for winning cells
             const winningAnimation = () => {
-                scene.traverse((object) => {
-                    if (object.userData && object.userData.type === 'mark' && object.userData.player === currentPlayer) {
-                        if (object.userData.player === 'X') {
-                            // Animate X
-                            object.rotation.y += 0.02;
-                            object.position.y = 0.2 + Math.sin(Date.now() * 0.005) * 0.1;
-                        } else {
-                            // Animate O
-                            object.rotation.z += 0.02;
-                            object.position.y = 0.2 + Math.sin(Date.now() * 0.005) * 0.1;
-                        }
-                    }
-                });
-                
-                if (gameOver) {
-                    requestAnimationFrame(winningAnimation);
-                }
-            };
-            
-            winningAnimation();
-        }
-
-        // Reset the game
-        function resetGame() {
-            try {
-                // Find and remove all mark objects
-                const objectsToRemove = [];
-                scene.traverse((object) => {
-                    if (object.userData && object.userData.type === 'mark') {
-                        objectsToRemove.push(object);
-                    }
-                });
-                
-                // Remove objects from scene
-                for (const object of objectsToRemove) {
-                    scene.remove(object);
-                }
-                
-                // Reset game state
-                board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
-                gameOver = false;
-                
-                if (gameMode === 'multiplayer') {
-                    // In multiplayer, only the host can fully reset the game
-                    if (isHost) {
-                        gameStarted = true;
-                        currentPlayer = 'X';
-                        
-                        // Send reset message to peer
-                        sendGameMessage({
-                            type: 'reset'
-                        });
-                        
-                        // Update game status
-                        updateGameStatus();
-                    } else {
-                        // Non-host players should wait for reset message
-                        document.getElementById('gameStatus').textContent = "Waiting for host to reset...";
-                    }
-                } else {
-                    // In single PC mode, show the player selector
-                    gameStarted = false;
-                    document.getElementById('playerSelector').style.display = 'block';
-                    document.getElementById('gameStatus').textContent = "Select who starts";
-                }
-                
-                // Force render update
-                renderer.render(scene, camera);
-            } catch (error) {
-                console.error("Error resetting game:", error);
-            }
-        }
-        
-        // Reset game from message (for non-host player)
-        function resetGameFromMessage() {
-            gameStarted = true;
-            currentPlayer = 'X';
-            gameOver = false;
-            
-            // Update game status
-            updateGameStatus();
-        }
-
-        // Handle mouse click
-        function onMouseDown(event) {
-            if (!gameStarted || gameOver) return;
-            
-            // In multiplayer mode, only process clicks during your turn
-            if (gameMode === 'multiplayer' && currentPlayer !== myPlayerSymbol) {
-                return;
-            }
-            
-            const mouse = new THREE.Vector2();
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-            
-            const raycaster = new THREE.Raycaster();
-            raycaster.setFromCamera(mouse, camera);
-            
-            const intersects = raycaster.intersectObjects(scene.children);
-            
-            for (let i = 0; i < intersects.length; i++) {
-                const intersect = intersects[i];
-                const object = intersect.object;
-                
-                if (object.userData && object.userData.type === 'cell') {
-                    const { row, col } = object.userData;
-                    placeMark(row, col);
-                    break;
-                }
-            }
-        }
-
-        // Handle window resize
+                scene
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
