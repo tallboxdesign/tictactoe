@@ -325,6 +325,7 @@
       flex-direction: column;
       overflow: hidden;
       transition: all 0.3s ease;
+      display: none; /* Initially hidden, shown only in multiplayer mode */
     }
     
     #chatHeader {
@@ -732,6 +733,9 @@
     
     // Toggle chat visibility
     function toggleChat() {
+      // Only work if in multiplayer mode
+      if (gameMode !== 'multiplayer') return;
+      
       const chatContainer = document.getElementById('chatContainer');
       const chatToggle = document.getElementById('chatToggle');
       
@@ -748,19 +752,22 @@
     
     // Send chat message
     function sendChatMessage() {
+      // Only work if in multiplayer mode
+      if (gameMode !== 'multiplayer') return;
+      
       const messageInput = document.getElementById('messageInput');
       const message = messageInput.value.trim();
       
       if (message === '') return;
       
-      const playerSymbol = gameMode === 'multiplayer' ? myPlayerSymbol : currentPlayer;
+      const playerSymbol = myPlayerSymbol;
       const playerName = playerSymbol === 'X' ? PLAYER_X : PLAYER_O;
       
       // Display message in chat
       displayChatMessage(playerName, message, playerSymbol);
       
       // Send message to other player in multiplayer mode
-      if (gameMode === 'multiplayer' && connection && connection.open) {
+      if (connection && connection.open) {
         sendGameMessage({
           type: 'chat',
           player: playerName,
@@ -775,6 +782,9 @@
     
     // Display chat message
     function displayChatMessage(playerName, message, playerSymbol) {
+      // Only display if in multiplayer mode or if it's a system message in multiplayer setup
+      if (gameMode !== 'multiplayer' && playerName !== "System") return;
+      
       const chatMessages = document.getElementById('chatMessages');
       const messageDiv = document.createElement('div');
       
@@ -799,9 +809,6 @@
       // If chat is collapsed, show it temporarily
       if (chatCollapsed) {
         toggleChat();
-        
-        // Optional: collapse chat again after a few seconds
-        // setTimeout(toggleChat, 5000);
       }
     }
     
@@ -848,6 +855,7 @@
         }
         document.getElementById('connectionStatus').style.display = 'none';
         document.getElementById('multiplayerSetup').style.display = 'none';
+        document.getElementById('chatContainer').style.display = 'none';
         document.getElementById('modeSelector').style.display = 'flex';
       });
     }
@@ -869,6 +877,10 @@
       document.getElementById('lobbyMessage').textContent = "Waiting for opponent to join with ID: " + gameId;
       document.getElementById('lobbyStartBtn').style.display = 'none';
       
+      // Show chat container when game ID is generated
+      document.getElementById('chatContainer').style.display = 'flex';
+      document.getElementById('chatMessages').innerHTML = '';
+      
       // Initialize PeerJS with the game ID
       initPeer(gameId);
       
@@ -882,7 +894,8 @@
       document.getElementById('gameStatus').textContent = "Lobby open. Waiting for opponent...";
       
       // Add system message to chat
-      displayChatMessage("System", "You've created a game as TATI (X). Waiting for opponent to join...", "system");
+      displayChatMessage("System", "You've created a game as TATI (X). Share the Game ID with your opponent.", "system");
+      displayChatMessage("System", "Game ID: " + gameId, "system");
       
       console.log("Created multiplayer game with ID:", gameId);
     }
@@ -896,6 +909,11 @@
         alert('Please enter a valid Game ID');
         return;
       }
+      
+      // Show chat container when joining a game
+      document.getElementById('chatContainer').style.display = 'flex';
+      document.getElementById('chatMessages').innerHTML = '';
+      
       // Initialize PeerJS and connect to host
       initPeer();
       
@@ -1193,13 +1211,14 @@
         loadSavedGame();
         // Show reset button for single PC mode
         document.getElementById('resetButton').style.display = 'block';
-        // Clear and initialize chat for single PC mode
-        document.getElementById('chatMessages').innerHTML = '';
-        displayChatMessage("System", "Single PC Mode - Players can chat during the game", "system");
+        // Hide chat in single PC mode
+        document.getElementById('chatContainer').style.display = 'none';
       } else {
         document.getElementById('connectionStatus').style.display = 'block';
         // In multiplayer mode, only show reset button for host
         document.getElementById('resetButton').style.display = isHost ? 'block' : 'none';
+        // Show chat in multiplayer mode
+        document.getElementById('chatContainer').style.display = 'flex';
         // Clear chat for multiplayer mode
         document.getElementById('chatMessages').innerHTML = '';
       }
@@ -1293,10 +1312,6 @@
       currentPlayer = selectedPlayer;
       document.getElementById('playerSelector').style.display = 'none';
       updateGameStatus();
-      
-      // Add system message to chat
-      const startingPlayer = currentPlayer === 'X' ? PLAYER_X : PLAYER_O;
-      displayChatMessage("System", `Game started with ${startingPlayer} (${currentPlayer}) playing first`, "system");
     }
     
     // Start Multiplayer Game (Host clicking Start in lobby)
@@ -1590,8 +1605,6 @@
           }
         } else {
           document.getElementById('gameStatus').textContent = `${winner} wins!`;
-          // Add chat message
-          displayChatMessage("System", `${winner} wins the game! 🎉`, "system");
         }
         triggerConfetti(currentPlayer);
         
@@ -1644,8 +1657,11 @@
           shareSoundEvent('draw');
         }
         
-        // Add chat message
-        displayChatMessage("System", "Game ended in a draw!", "system");
+        // Add chat message if in multiplayer mode
+        if (gameMode === 'multiplayer') {
+          displayChatMessage("System", "Game ended in a draw!", "system");
+        }
+        
         scoreX += 2;
         scoreO += 2;
         updateScoreDisplay();
@@ -1881,10 +1897,14 @@
           mathDifficulty++;
           consecutiveCorrect = 0;
           alert("Correct! Your points have been doubled! The math challenges will now get a bit harder!");
-          displayChatMessage("System", "YONI solved the math problem correctly and doubled points! Math difficulty increased.", "system");
+          if (gameMode === 'multiplayer') {
+            displayChatMessage("System", "YONI solved the math problem correctly and doubled points! Math difficulty increased.", "system");
+          }
         } else {
           alert("Correct! Your points have been doubled!");
-          displayChatMessage("System", "YONI solved the math problem correctly and doubled points!", "system");
+          if (gameMode === 'multiplayer') {
+            displayChatMessage("System", "YONI solved the math problem correctly and doubled points!", "system");
+          }
         }
         success = true;
       } else {
@@ -1894,7 +1914,9 @@
         playSound(mathIncorrectSound);
         
         alert("Sorry, that's incorrect. The correct answer is " + currentAnswer);
-        displayChatMessage("System", `YONI got the math problem wrong. The correct answer was ${currentAnswer}.`, "system");
+        if (gameMode === 'multiplayer') {
+          displayChatMessage("System", `YONI got the math problem wrong. The correct answer was ${currentAnswer}.`, "system");
+        }
         if (mathDifficulty > 1 && Math.random() < 0.3) {
           mathDifficulty--;
         }
@@ -1920,7 +1942,9 @@
     // Skip math question
     function skipMathQuestion() {
       document.getElementById('mathModal').style.display = 'none';
-      displayChatMessage("System", "YONI skipped the math challenge.", "system");
+      if (gameMode === 'multiplayer') {
+        displayChatMessage("System", "YONI skipped the math challenge.", "system");
+      }
       
       // In multiplayer mode, send result back to host
       if (gameMode === 'multiplayer' && !isHost) {
@@ -2064,9 +2088,6 @@
           gameStarted = false;
           document.getElementById('playerSelector').style.display = 'block';
           document.getElementById('gameStatus').textContent = "Select who starts";
-          
-          // Add chat message
-          displayChatMessage("System", "Game reset. Select who starts.", "system");
         }
         renderer.render(scene, camera);
       } catch (error) {
